@@ -18,13 +18,16 @@ def initPathSMAP(dirDB, dirOut, dirResult):
 
 hostName = socket.gethostname()
 
-elif hostName[:2] == 'sh':
+if hostName[:2] == 'sh':
     host = 'sherlock'
     dirJob = r'/scratch/users/avhuynh/jobs/'
     dirVeg=r'/home/users/avhuynh/lfmc/data/'
+    dirCode = r'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/'
 elif hostName == 'mac':
     host =  'mac'
-    dirData = r'Documents/lfmc/geolearn/hydroDL/data'
+    # dirData = r'Documents/lfmc/geolearn/hydroDL/data'
     dirVeg = r'/Users/andyhuynh/Documents/lfmc/data/'
+    dirCode = r'/Users/andyhuynh/Documents/lfmc/geolearn/app/vegetation/attention/'
+    dirJob = r'/Users/andyhuynh/Documents/lfmc/data/jobs/'
 
 
