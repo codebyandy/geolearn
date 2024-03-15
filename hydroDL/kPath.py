@@ -56,4 +56,8 @@ elif hostName == 'mini':
     dirWQ = r'/home/kuai/work/waterQuality/'    
     dirCode = r'/home/kuai/GitHUB/geolearn'
     dirVeg = r'/home/kuai/work/VegetationWater/data/'
-
+elif hostName == 'mac':
+    dirData = r'Documents/lfmc/geolearn/hydroDL/data'
+    dirVeg = r'/Users/andyhuynh/Documents/lfmc/data/'
+    dirJob = r'/Users/andyhuynh/Documents/lfmc/data/jobs/'
+    # dirVeg = r'/Users/andyhuynh/Documents/lfmc/providedData/'

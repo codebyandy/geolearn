@@ -1,0 +1,14 @@
+#!/bin/bash
+#SBATCH -p gpu
+#SBATCH -G 1
+#SBATCH --job-name=TEST
+#SBATCH --output=TEST.out
+#SBATCH --error=TEST.err
+#SBATCH --time=8:0:0
+#SBATCH --mem=16000
+#SBATCH --qos=normal
+#SBATCH -C "GPU_SKU:P100_PCIE|GPU_SKU:RTX_2080Ti|GPU_SKU:V100_PCIE|GPU_SKU:V100S_PCIE|GPU_SKU:V100_SXM2"#SBATCH --mail-type=ALL
+#SBATCH --mail-user=kuaifang@stanford.edu
+hostname
+nvidia-smi -L
+hi

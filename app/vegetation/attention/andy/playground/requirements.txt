@@ -1,0 +1,9 @@
+matplotlib-base
+pip
+pytorch
+scikit-learn
+scipy
+torchaudio
+torchvision
+tqdm
+torch
