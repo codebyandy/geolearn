@@ -1,8 +1,7 @@
 from hydroDL.master import slurm
-
-path = "/Users/andyhuynh/Documents/lfmc/geolearn/app/vegetation/attention/"
+from hydroDL import kPath
 
 jobName="test.sh"
-cmdLine=f"python3 {path}data.py" 
+cmdLine=f"python3 {kPath.dirCode}data.py" 
 
 slurm.submitJobGPU(jobName, cmdLine)
