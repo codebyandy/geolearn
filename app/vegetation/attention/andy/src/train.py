@@ -48,7 +48,7 @@ def get_inputs(inputs, subset):
 def train(data_tuple, rho, nh, epochs, iters_per_epoch, learning_rate, sched_start_epoch,
           inputs, out_method, testing, weights_path, device, foldFolder):
     # device
-    device = torch.device(f"cuda:{args.device}" if args.device >=0 else "cpu")
+    # device = torch.device(f"cuda:{args.device}" if args.device >=0 else "cpu")
     print(f"Using device: {device}")
     
     # prepare model
@@ -62,6 +62,7 @@ def train(data_tuple, rho, nh, epochs, iters_per_epoch, learning_rate, sched_sta
         print(f"Loaded weights from {weights_path}")
 
     model.train()
+    model.to(device)
 
     pbar = tqdm(range(epochs))
     for ep in pbar:   
@@ -125,7 +126,7 @@ def main(args, saveFolder):
     # load dataset
     # with open(os.path.join(kPath.dirVeg, args.dataset), 'rb') as f:
     #     data_folds = pickle.load(f)
-    with open("/Users/andyhuynh/Documents/lfmc/data/data_tuple_random.pkl", 'rb') as f:
+    with open("/Users/andyhuynh/Documents/lfmc/data/stratified_3_fold.pkl", 'rb') as f:
         data_tuple = pickle.load(f)
 
     # loop thru folds for cross-validation

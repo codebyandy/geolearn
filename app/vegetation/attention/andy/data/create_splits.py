@@ -12,7 +12,6 @@ import os
 import pdb
 
 def prepare_dataset(dataName, rho):
-    pdb.set_trace()
     df = dbVeg.DataFrameVeg(dataName)
     dm = DataModel(X=df.x, XC=df.xc, Y=df.y)
     siteIdLst = df.siteIdLst
@@ -61,6 +60,9 @@ def prepare_dataset(dataName, rho):
     indSiteAll = countAry[nRm:, 0].astype(int)
     dictSubset = dict()
 
+
+    pdb.set_trace()
+    
     # create splits
     lcIdx = [df.varXC.index(f"lc{i}") for i in range(1, 10)]
     lc_pct = df.xc[:, lcIdx]
@@ -68,33 +70,33 @@ def prepare_dataset(dataName, rho):
     site_lcs = pd.DataFrame({"lc": top_lcs})
     site_lcs = site_lcs[site_lcs.index.isin(indSiteAll)]
     
-    size = 0
-    num_folds = 3
-    folds = {i : [] for i in range(num_folds)}
-    for lc in np.unique(top_lcs):
-        lc_subset = np.array(site_lcs[site_lcs.lc == lc].index)
-        lc_subset = np.random.permutation(lc_subset)
-        size += lc_subset.shape[0]
-        split_size = round(len(lc_subset) / num_folds)
+    # size = 0
+    # num_folds = 3
+    # folds = {i : [] for i in range(num_folds)}
+    # for lc in np.unique(top_lcs):
+    #     lc_subset = np.array(site_lcs[site_lcs.lc == lc].index)
+    #     lc_subset = np.ran dom.permutation(lc_subset)
+    #     size += lc_subset.shape[0]
+    #     split_size = round(len(lc_subset) / num_folds)
         
-        i = 0
-        for rand_fold in np.random.permutation(range(num_folds)):
-            split_stop = len(lc_subset) if i == num_folds - 1 else split_size * (i + 1)
-            folds[rand_fold].append(lc_subset[split_size * i : split_stop])
-            i += 1
+    #     i = 0
+    #     for rand_fold in np.random.permutation(range(num_folds)):
+    #         split_stop = len(lc_subset) if i == num_folds - 1 else split_size * (i + 1)
+    #         folds[rand_fold].append(lc_subset[split_size * i : split_stop])
+    #         i += 1
 
-    folds = {i : np.concatenate(idxs) for (i, idxs) in folds.items()}
+    # folds = {i : np.concatenate(idxs) for (i, idxs) in folds.items()}
 
-    data_folds = {}
-    for i in range(num_folds):
-        siteTest = folds[i]
-        folds_for_train = []
-        for j in range(num_folds):
-            if j != i:
-                folds_for_train.append(folds[j])
-        siteTrain = np.concatenate(folds_for_train)
-        indTrain = np.where(np.isin(jInd, siteTrain))[0]
-        indTest = np.where(np.isin(jInd, siteTest))[0]
+    # data_folds = {}
+    # for i in range(num_folds):
+    #     siteTest = folds[i]
+    #     folds_for_train = []
+    #     for j in range(num_folds):
+    #         if j != i:
+    #             folds_for_train.append(folds[j])
+    #     siteTrain = np.concatenate(folds_for_train)
+    #     indTrain = np.where(np.isin(jInd, siteTrain))[0]
+    #     indTest = np.where(np.isin(jInd, siteTest))[0]
         data_tuple = (df, indTrain, indTest, nMat, pSLst, pLLst, pMLst, x, xc, yc) 
         data_folds[i] = data_tuple
     

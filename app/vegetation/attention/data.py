@@ -18,6 +18,13 @@ from hydroDL import kPath
 import torch.optim.lr_scheduler as lr_scheduler
 import dill
 
+
+
+from tqdm import tqdm
+import pdb
+from sklearn.metrics import r2_score
+
+
 rho = 45
 dataName = 'singleDaily'
 importlib.reload(hydroDL.data.dbVeg)
@@ -75,6 +82,9 @@ countAry = np.array([[x, y] for y, x in sorted(zip(count, jSite))])
 nRm = sum(countAry[:, 1] < 5)
 indSiteAll = countAry[nRm:, 0].astype(int)
 dictSubset = dict()
+
+
+
 for k in range(5):
     siteTest = indSiteAll[k::5]
     siteTrain = np.setdiff1d(indSiteAll, siteTest)
@@ -354,21 +364,24 @@ _ = ax.plot([vmin, vmax], [vmin, vmax], 'r-')
 fig.show()
 
 # rmse
-np.sqrt(np.mean((obs - pred) ** 2))
-np.corrcoef(yOut, yT)
+print("rmse", np.sqrt(np.mean((obs - pred) ** 2)))
+# print("corrcoef", np.corrcoef(yOut, yT))
+print("corrcoef", np.corrcoef(obs, pred)[0, 1])
+print("coef det", r2_score(obs, pred))
+
 np.mean(pred) - np.mean(obs)
 
 # save results
-saveFolder = os.path.join(kPath.dirVeg, 'model', 'attention')
-torch.save(model.state_dict(), os.path.join(saveFolder, 'model'))
+# saveFolder = os.path.join(kPath.dirVeg, 'model', 'attention')
+# torch.save(model.state_dict(), os.path.join(saveFolder, 'model'))
 # json save subset dict
-with open(os.path.join(saveFolder, 'subset.json'), 'w') as fp:
-    json.dump(dictSubset, fp, indent=4)
+# with open(os.path.join(saveFolder, 'subset.json'), 'w') as fp:
+#     json.dump(dictSubset, fp, indent=4)
 
 # save work space
-saveFolder = os.path.join(kPath.dirVeg, 'model', 'attention')
+# saveFolder = os.path.join(kPath.dirVeg, 'model', 'attention')
 # dill.dump_session(os.path.join(saveFolder, 'workspace.db'))
-dill.load_session(os.path.join(saveFolder, 'workspace.db'))
+# dill.load_session(os.path.join(saveFolder, 'workspace.db'))
 
 # plots
 import matplotlib
@@ -439,16 +452,23 @@ vmin = np.min([xlim[0], ylim[0]])
 vmax = np.max([xlim[1], ylim[1]])
 _ = ax.plot([vmin, vmax], [vmin, vmax], 'r-')
 fig.show()
-np.corrcoef(matResult[:, 0], matResult[:, 1])[0, 1]
+
 # rmse
-np.sqrt(np.mean((matResult[:, 0] - matResult[:, 1]) ** 2))
+print("rmse", np.sqrt(np.mean((matResult[:, 0] - matResult[:, 1]) ** 2)))
+print("corrcoef", np.corrcoef(matResult[:, 0], matResult[:, 1])[0, 1])
+print("coef det", r2_score(matResult[:, 0], matResult[:, 1]))
 
 # anomoly
 fig, ax = plt.subplots(1, 1)
 aLst, bLst = list(), list()
+
+# for site in siteLst:
+#     aLst.append(site[:, 0] - np.mean(site[:, 0]))
+#     bLst.append(site[:, 1] - np.mean(site[:, 1]))
 for site in siteLst:
-    aLst.append(site[:, 0] - np.mean(site[:, 0]))
-    bLst.append(site[:, 1] - np.mean(site[:, 1]))
+    aLst.append(site[0] - np.mean(site[0]))
+    bLst.append(site[1] - np.mean(site[1]))
+
 a, b = np.concatenate(aLst), np.concatenate(bLst)
 ax.plot(np.concatenate(aLst), np.concatenate(bLst), '.')
 xlim = ax.get_xlim()
@@ -457,6 +477,12 @@ vmin = np.min([xlim[0], ylim[0]])
 vmax = np.max([xlim[1], ylim[1]])
 _ = ax.plot([vmin, vmax], [vmin, vmax], 'r-')
 fig.show()
+
+# rmse
+print("rmse", np.sqrt(np.mean((a - b) ** 2)))
+print("corrcoef", np.corrcoef(a,b)[0, 1])
+print("coef det", r2_score(a, b))
+
 
 # mean
 ax.plot(matResult[:, 0], matResult[:, 1], '*')
@@ -522,3 +548,4 @@ ax.imshow(P[0, :, :].detach().numpy(),extent=[0,32,-45,45])
 
 fig.show()
 
+pdb.set_trace()

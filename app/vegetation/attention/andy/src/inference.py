@@ -41,8 +41,10 @@ def calc_metrics(obs, pred):
 
 
 def analysis(dict, rho=45, nh=32):
-    with open(os.path.join(kPath.dirVeg, 'data_folds.pkl'), 'rb') as f:
-        data_tuple = pickle.load(f)[0]
+    with open(os.path.join(kPath.dirVeg, 'stratified_3_fold.pkl'), 'rb') as f:
+        data_tuple = pickle.load(f)
+    # with open(os.path.join(kPath.dirVeg, 'data_folds.pkl'), 'rb') as f:
+    #     data_tuple = pickle.load(f)[0]
         
     metrics_data = ["RMSE", "rsq", "Rsq", 
             "site-mean RMSE", "site-mean rsq", "site-mean Rsq",

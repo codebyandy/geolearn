@@ -49,7 +49,7 @@ class AttentionLayer(nn.Module):
         attention = torch.softmax(score, dim=-1)
         out = torch.bmm(attention, v.transpose(1, 2))
         out = self.W_o(out.transpose(1, 2))
-        return out
+        return out.to(0)
 
 
 class PositionWiseFFN(nn.Module):
