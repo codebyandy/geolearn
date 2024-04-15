@@ -20,6 +20,7 @@ hostName = socket.gethostname()
 
 if hostName[:2] == 'sh':
     host = 'sherlock'
+    dirData = r'/home/users/avhuynh/lfmc/geolearn/hydroDL/data/'
     dirJob = r'/scratch/users/avhuynh/jobs/'
     dirVeg=r'/home/users/avhuynh/lfmc/data/'
     dirCode = r'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/'
