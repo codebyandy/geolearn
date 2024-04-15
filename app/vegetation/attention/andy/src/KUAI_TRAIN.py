@@ -18,13 +18,13 @@ from hydroDL import kPath
 import torch.optim.lr_scheduler as lr_scheduler
 import dill
 
-
-
 from tqdm import tqdm
 import pdb
 from sklearn.metrics import r2_score
 
 
+
+RUN = "default2"
 rho = 45
 dataName = 'singleDaily'
 importlib.reload(hydroDL.data.dbVeg)
@@ -35,6 +35,9 @@ dm.trans(mtdDefault='minmax')
 dataTup = dm.getData()
 dataEnd, (iInd, jInd) = dataTs2Range(dataTup, rho, returnInd=True)
 x, xc, y, yc = dataEnd
+
+iInd = np.array(iInd)
+jInd = np.array(jInd)
 
 np.nanmean(dm.x[:, :, 0])
 np.nanmax(df.x[:, :, 2])
@@ -74,45 +77,56 @@ pSLst = [pSLst[k] for k in indKeep]
 pLLst = [pLLst[k] for k in indKeep]
 pMLst = [pMLst[k] for k in indKeep]
 
-pdb.set_trace()
-
 jInd = jInd[indKeep]
 siteIdLst = [siteIdLst[k] for k in jInd]
 
 # split train and test
 jSite, count = np.unique(jInd, return_counts=True)
 countAry = np.array([[x, y] for y, x in sorted(zip(count, jSite))])
-nRm = sum(countAry[:, 1] < 5)
-indSiteAll = countAry[nRm:, 0].astype(int)
-dictSubset = dict()
 
+# nRm = sum(countAry[:, 1] < 5)
+# indSiteAll = countAry[nRm:, 0].astype(int)
 
+# THRESHOLD = 40
+# nRm = sum(countAry[:, 1] < THRESHOLD)
+# indSiteOverThresh = countAry[nRm:, 0].astype(int) 
+# indSiteUnderThresh = countAry[:nRm, 0].astype(int) 
 
-for k in range(5):
-    siteTest = indSiteAll[k::5]
-    siteTrain = np.setdiff1d(indSiteAll, siteTest)
-    indTest = np.where(np.isin(jInd, siteTest))[0]
-    indTrain = np.where(np.isin(jInd, siteTrain))[0]
-    dictSubset['testSite_k{}5'.format(k)] = siteTest.tolist()
-    dictSubset['trainSite_k{}5'.format(k)] = siteTrain.tolist()
-    dictSubset['testInd_k{}5'.format(k)] = indTest.tolist()
-    dictSubset['trainInd_k{}5'.format(k)] = indTrain.tolist()
+# dictSubset = dict()
+
+# dictSubset['testSite_underThresh'] = indSiteUnderThresh
+# dictSubset['testInd_underThresh'] = np.where(np.isin(jInd, indSiteUnderThresh))[0]
+# for k in range(5):
+#     siteTest = indSiteOverThresh[k::5]
+#     siteTrain = np.setdiff1d(indSiteOverThresh, siteTest)
+#     indTest = np.where(np.isin(jInd, siteTest))[0]
+#     indTrain = np.where(np.isin(jInd, siteTrain))[0]
+#     dictSubset['testSite_k{}5'.format(k)] = siteTest.tolist()
+#     dictSubset['trainSite_k{}5'.format(k)] = siteTrain.tolist()
+#     dictSubset['testInd_k{}5'.format(k)] = indTest.tolist()
+#     dictSubset['trainInd_k{}5'.format(k)] = indTrain.tolist()
 
 # save data
-# saveFolder = os.path.join(kPath.dirVeg, 'model', 'attention')
+saveFolder = os.path.join(kPath.dirVeg, 'model', 'attention')
 # if not os.path.exists(saveFolder):
 #     os.mkdir(saveFolder)
 # dataFile = os.path.join(saveFolder, 'data.npz')
 # np.savez_compressed(dataFile, x=x, xc=xc, y=yc, yc=yc, tInd=iInd, siteInd=jInd)
-# subsetFile = os.path.join(saveFolder, 'subset.json')
+subsetFile = os.path.join(saveFolder, 'subset.json')
 # with open(subsetFile, 'w') as fp:
 #     json.dump(dictSubset, fp, indent=4)
 
 
-tInd = iInd
-siteInd = jInd
+
+# tInd = iInd
+# siteInd = jInd
+with open(subsetFile) as json_file:
+    dictSubset = json.load(json_file)
+print("loaded dictSubset")
+
 trainInd = dictSubset['trainInd_k05']
 testInd = dictSubset['testInd_k05']
+testIndBelow = dictSubset['testInd_underThresh']
 
 bS = 8
 bL = 6
@@ -315,8 +329,14 @@ fig, ax = plt.subplots(1, 1, figsize=(10, 5))
 ax.plot(yP.detach().numpy(), yT, '*')
 # ax.set_xlim([0, 1])
 # ax.set_ylim([0, 1])
-fig.show()
+# fig.show()
 np.corrcoef(yP.detach().numpy(), yT.detach().numpy())
+
+
+
+
+
+
 
 # test
 model.eval()
@@ -349,11 +369,11 @@ for k, ind in enumerate(testInd):
     yOut[k] = yP.detach().numpy()
 
 yT = yc[testInd, 0]
-fig, ax = plt.subplots(1, 1, figsize=(10, 5))
-ax.plot(yOut, yT, '*')
+# fig, ax = plt.subplots(1, 1, figsize=(10, 5))
+# ax.plot(yOut, yT, '*')
 # ax.set_xlim([0, 1])
 # ax.set_ylim([0, 1])
-fig.show()
+# fig.show()
 
 obs = dm.transOutY(yT[:, None])[:, 0]
 pred = dm.transOutY(yOut[:, None])[:, 0]
@@ -364,21 +384,36 @@ ylim = ax.get_ylim()
 vmin = np.min([xlim[0], ylim[0]])
 vmax = np.max([xlim[1], ylim[1]])
 _ = ax.plot([vmin, vmax], [vmin, vmax], 'r-')
+ax.set_title("All Obs (Quality sites)")
 fig.show()
 
-# rmse
-print("rmse", np.sqrt(np.mean((obs - pred) ** 2)))
+print("ABOVE THRESH")
+
+rmse = np.sqrt(np.mean((obs - pred) ** 2))
 # print("corrcoef", np.corrcoef(yOut, yT))
-print("corrcoef", np.corrcoef(obs, pred)[0, 1])
-print("coef det", r2_score(obs, pred))
+corrcoef = np.corrcoef(obs, pred)[0, 1]
+coef_det = r2_score(obs, pred)
+obs_quality = [rmse, corrcoef, coef_det]
+
+# rmse
+print("All obs")
+print("rmse", rmse)
+# print("corrcoef", np.corrcoef(yOut, yT))
+print("corrcoef", corrcoef)
+print("coef det", coef_det)
+print("")
 
 np.mean(pred) - np.mean(obs)
 
-# save results
+
+
+
+
+# # save results
 # saveFolder = os.path.join(kPath.dirVeg, 'model', 'attention')
-# torch.save(model.state_dict(), os.path.join(saveFolder, 'model'))
-# json save subset dict
-# with open(os.path.join(saveFolder, 'subset.json'), 'w') as fp:
+# torch.save(model.state_dict(), os.path.join(saveFolder, 'model_NEW_DATASET'))
+# # json save subset dict
+# with open(os.path.join(saveFolder, 'subset_NEW_DATASET.json'), 'w') as fp:
 #     json.dump(dictSubset, fp, indent=4)
 
 # save work space
@@ -387,48 +422,48 @@ np.mean(pred) - np.mean(obs)
 # dill.load_session(os.path.join(saveFolder, 'workspace.db'))
 
 # plots
-import matplotlib
+# import matplotlib
 
-xS = torch.ones(1, 5, 3)
-xL = torch.ones(1, 5, 8)
-xM = torch.ones(1, 5, 2)
-pS = torch.tensor([-1, -0.5, 0, 0.5, 1 ])[None,:]
-pL = torch.tensor([-1, -0.5, 0, 0.5, 1 ])[None,:]
-pM = torch.tensor([-1, -0.5, 0, 0.5, 1 ])[None,:]
-xcT = torch.ones(1, 15)
-yP = model((xS, xL, xM), (pS, pL, pM), xcT, (5, 5, 5))
-xIn=model.encoder((xS, xL, xM),(pS, pL, pM), xcT)
-atten=model.atten
-q, k, v = atten.W_q(xIn), atten.W_k(xIn), atten.W_v(xIn)
-d = q.shape[1]
-score = torch.bmm(q.transpose(1, 2), k) / math.sqrt(d)
-fig,axes=plt.subplots(2,1)
-im1=axes[0].imshow(k[0,:,:].detach().numpy())
-im2=axes[1].imshow(k[0,:,:].detach().numpy())
-fig.colorbar(im1)
-fig.colorbar(im2)
-fig.show()
-
-
-matplotlib.rcParams.update({'font.size': 11})
-matplotlib.rcParams.update({'lines.linewidth': 2})
-matplotlib.rcParams.update({'lines.markersize': 12})
-matplotlib.rcParams.update({'legend.fontsize': 11})
-
-# attention layer
-model.eval()
+# xS = torch.ones(1, 5, 3)
+# xL = torch.ones(1, 5, 8)
+# xM = torch.ones(1, 5, 2)
+# pS = torch.tensor([-1, -0.5, 0, 0.5, 1 ])[None,:]
+# pL = torch.tensor([-1, -0.5, 0, 0.5, 1 ])[None,:]
+# pM = torch.tensor([-1, -0.5, 0, 0.5, 1 ])[None,:]
+# xcT = torch.ones(1, 15)
+# yP = model((xS, xL, xM), (pS, pL, pM), xcT, (5, 5, 5))
+# xIn=model.encoder((xS, xL, xM),(pS, pL, pM), xcT)
+# atten=model.atten
+# q, k, v = atten.W_q(xIn), atten.W_k(xIn), atten.W_v(xIn)
+# d = q.shape[1]
+# score = torch.bmm(q.transpose(1, 2), k) / math.sqrt(d)
+# fig,axes=plt.subplots(2,1)
+# im1=axes[0].imshow(k[0,:,:].detach().numpy())
+# im2=axes[1].imshow(k[0,:,:].detach().numpy())
+# fig.colorbar(im1)
+# fig.colorbar(im2)
+# fig.show()
 
 
-obs = dm.transOutY(yT[:, None])[:, 0]
-pred = dm.transOutY(yOut[:, None])[:, 0]
-fig, ax = plt.subplots(1, 1)
-ax.plot(pred, obs, '.')
-xlim = ax.get_xlim()
-ylim = ax.get_ylim()
-vmin = np.min([xlim[0], ylim[0]])
-vmax = np.max([xlim[1], ylim[1]])
-_ = ax.plot([vmin, vmax], [vmin, vmax], 'r-')
-fig.show()
+# matplotlib.rcParams.update({'font.size': 11})
+# matplotlib.rcParams.update({'lines.linewidth': 2})
+# matplotlib.rcParams.update({'lines.markersize': 12})
+# matplotlib.rcParams.update({'legend.fontsize': 11})
+
+# # attention layer
+# model.eval()
+
+
+# obs = dm.transOutY(yT[:, None])[:, 0]
+# pred = dm.transOutY(yOut[:, None])[:, 0]
+# fig, ax = plt.subplots(1, 1)
+# ax.plot(pred, obs, '.')
+# xlim = ax.get_xlim()
+# ylim = ax.get_ylim()
+# vmin = np.min([xlim[0], ylim[0]])
+# vmax = np.max([xlim[1], ylim[1]])
+# _ = ax.plot([vmin, vmax], [vmin, vmax], 'r-')
+# fig.show()
 
 # to site
 tempS = jInd[testInd]
@@ -454,12 +489,23 @@ ylim = ax.get_ylim()
 vmin = np.min([xlim[0], ylim[0]])
 vmax = np.max([xlim[1], ylim[1]])
 _ = ax.plot([vmin, vmax], [vmin, vmax], 'r-')
+ax.set_title("Obs mean per site (Quality sites)")
 fig.show()
 
+
+rmse = np.sqrt(np.mean((matResult[:, 0] - matResult[:, 1]) ** 2))
+corrcoef = np.corrcoef(matResult[:, 0], matResult[:, 1])[0, 1]
+coef_det = r2_score(matResult[:, 0], matResult[:, 1])
+site_quality = [rmse, corrcoef, coef_det]
+
 # rmse
-print("rmse", np.sqrt(np.mean((matResult[:, 0] - matResult[:, 1]) ** 2)))
-print("corrcoef", np.corrcoef(matResult[:, 0], matResult[:, 1])[0, 1])
-print("coef det", r2_score(matResult[:, 0], matResult[:, 1]))
+print("Obs mean per site")
+print("rmse",rmse)
+print("corrcoef", corrcoef)
+print("coef det", coef_det)
+print("")
+
+
 
 # anomoly
 fig, ax = plt.subplots(1, 1)
@@ -479,76 +525,318 @@ ylim = ax.get_ylim()
 vmin = np.min([xlim[0], ylim[0]])
 vmax = np.max([xlim[1], ylim[1]])
 _ = ax.plot([vmin, vmax], [vmin, vmax], 'r-')
+ax.set_title("Obs diff from site means (Quality sites)")
 fig.show()
 
 # rmse
-print("rmse", np.sqrt(np.mean((a - b) ** 2)))
-print("corrcoef", np.corrcoef(a,b)[0, 1])
-print("coef det", r2_score(a, b))
+print("Obs diff from site means")
+rmse = np.sqrt(np.mean((a - b) ** 2))
+corrcoef = np.corrcoef(a,b)[0, 1]
+coef_det = r2_score(a, b)
+anomaly_quality = [rmse, corrcoef, coef_det]
+
+print("rmse", rmse)
+print("corrcoef", corrcoef)
+print("coef det", coef_det)
+print("")
+
+
+
+
+
+
+
+
+
+# # mean
+# ax.plot(matResult[:, 0], matResult[:, 1], '*')
+# xlim = ax.get_xlim()
+# ylim = ax.get_ylim()
+# vmin = np.min([xlim[0], ylim[0]])
+# vmax = np.max([xlim[1], ylim[1]])
+# _ = ax.plot([vmin, vmax], [vmin, vmax], 'r-')
+# fig.show()
+
+# # correlation map
+# import matplotlib.gridspec as gridspec
+
+# trainSite = np.unique(jInd[trainInd])
+# lat = df.lat[trainSite]
+# lon = df.lon[trainSite]
+# figM = plt.figure(figsize=(8, 6))
+# gsM = gridspec.GridSpec(1, 1)
+# axM = mapplot.mapPoint(
+#     figM, gsM[0, 0], lat, lon, np.zeros(len(lat)), cmap='gray', cb=False
+# )
+# figM.show()
+
+# lat = df.lat[testSite]
+# lon = df.lon[testSite]
+# figM = plt.figure(figsize=(8, 6))
+# gsM = gridspec.GridSpec(1, 1)
+# axM = mapplot.mapPoint(figM, gsM[0, 0], lat, lon, matResult[:, 2], s=50)
+# figM.show()
+
+
+# def funcM():
+#     lat = df.lat[testSite]
+#     lon = df.lon[testSite]
+#     figM = plt.figure(figsize=(8, 6))
+#     gsM = gridspec.GridSpec(1, 1)
+#     axM = mapplot.mapPoint(figM, gsM[0, 0], lat, lon, matResult[:, 2], s=50)
+#     figP, axP = plt.subplots(1, 1)
+#     return figM, axM, figP, axP, lon, lat
+
+
+# def funcP(iP, axP):
+#     print(iP)
+#     axP.plot(siteLst[iP][2], siteLst[iP][0], 'r*-', label='pred')
+#     axP.plot(siteLst[iP][2], siteLst[iP][1], 'b*-', label='obs')
+#     axP.legend()
+
+
+# figplot.clickMap(funcM, funcP)
+
+# # position encoding plot
+# pos = torch.arange(-45, 45, dtype=torch.float32)/45
+# pos=pos[None,:]
+# nh=32
+# P = torch.zeros([pos.shape[0], pos.shape[1], nh], dtype=torch.float32)
+# for i in range(int(nh / 2)):
+#     # P[:, :, 2 * i] = torch.sin(pos * (i + 1) * torch.pi)
+#     # P[:, :, 2 * i + 1] = torch.cos(pos * (i + 1) * torch.pi)
+#     P[:, :, 2 * i] = torch.sin(pos *rho/ 10000**((i + 1)/32) )
+#     P[:, :, 2 * i + 1] = torch.cos(pos *rho/ 10000**((i + 1)/32) )
+# fig, ax = plt.subplots(1, 1)
+# ax.imshow(P[0, :, :].detach().numpy(),extent=[0,32,-45,45])
+
+# fig.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+testInd = testIndBelow
+
+# test
+model.eval()
+varS = ['VV', 'VH', 'vh_vv']
+varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
+varM = ['Fpar', 'Lai']
+iS = [df.varX.index(var) for var in varS]
+iL = [df.varX.index(var) for var in varL]
+iM = [df.varX.index(var) for var in varM]
+yOut = np.zeros(len(testInd))
+
+for k, ind in enumerate(testInd):
+    k
+    xS = x[pSLst[ind], ind, :][:, iS][None, ...]
+    xL = x[pLLst[ind], ind, :][:, iL][None, ...]
+    xM = x[pMLst[ind], ind, :][:, iM][None, ...]
+    pS = (pSLst[ind][None, ...] - rho) / rho
+    pL = (pLLst[ind][None, ...] - rho) / rho
+    pM = (pMLst[ind][None, ...] - rho) / rho
+    xcT = xc[ind][None, ...]
+    xS = torch.from_numpy(xS).float()
+    xL = torch.from_numpy(xL).float()
+    xM = torch.from_numpy(xM).float()
+    pS = torch.from_numpy(pS).float()
+    pL = torch.from_numpy(pL).float()
+    pM = torch.from_numpy(pM).float()
+    xcT = torch.from_numpy(xcT).float()
+    lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
+    yP = model((xS, xL, xM), (pS, pL, pM), xcT, lTup)
+    yOut[k] = yP.detach().numpy()
+
+yT = yc[testInd, 0]
+# fig, ax = plt.subplots(1, 1, figsize=(10, 5))
+# ax.plot(yOut, yT, '*')
+# # ax.set_xlim([0, 1])
+# # ax.set_ylim([0, 1])
+# fig.show()
+
+obs = dm.transOutY(yT[:, None])[:, 0]
+pred = dm.transOutY(yOut[:, None])[:, 0]
+fig, ax = plt.subplots(1, 1)
+ax.plot(pred, obs, '*')
+xlim = ax.get_xlim()
+ylim = ax.get_ylim()
+vmin = np.min([xlim[0], ylim[0]])
+vmax = np.max([xlim[1], ylim[1]])
+_ = ax.plot([vmin, vmax], [vmin, vmax], 'r-')
+ax.set_title("All obs (Poor sites)")
+fig.show()
+
+print("BELOW THRESH")
+
+rmse = np.sqrt(np.mean((obs - pred) ** 2))
+# print("corrcoef", np.corrcoef(yOut, yT))
+corrcoef = np.corrcoef(obs, pred)[0, 1]
+coef_det = r2_score(obs, pred)
+obs_poor = [rmse, corrcoef, coef_det]
+
+# rmse
+print("All obs")
+print("rmse", rmse)
+# print("corrcoef", np.corrcoef(yOut, yT))
+print("corrcoef", corrcoef)
+print("coef det", coef_det)
+print("")
+
+np.mean(pred) - np.mean(obs)
+
+
+
+# save results
+saveFolder = os.path.join(kPath.dirVeg, 'model', 'attention')
+torch.save(model.state_dict(), os.path.join(saveFolder, f'model_{RUN}'))
+# # json save subset dict
+# with open(os.path.join(saveFolder, 'subset_NEW_DATASET.json'), 'w') as fp:
+#     json.dump(dictSubset, fp, indent=4)
+
+# save work space
+# saveFolder = os.path.join(kPath.dirVeg, 'model', 'attention')
+# dill.dump_session(os.path.join(saveFolder, 'workspace.db'))
+# dill.load_session(os.path.join(saveFolder, 'workspace.db'))
+
+# plots
+# import matplotlib
+
+# xS = torch.ones(1, 5, 3)
+# xL = torch.ones(1, 5, 8)
+# xM = torch.ones(1, 5, 2)
+# pS = torch.tensor([-1, -0.5, 0, 0.5, 1 ])[None,:]
+# pL = torch.tensor([-1, -0.5, 0, 0.5, 1 ])[None,:]
+# pM = torch.tensor([-1, -0.5, 0, 0.5, 1 ])[None,:]
+# xcT = torch.ones(1, 15)
+# yP = model((xS, xL, xM), (pS, pL, pM), xcT, (5, 5, 5))
+# xIn=model.encoder((xS, xL, xM),(pS, pL, pM), xcT)
+# atten=model.atten
+# q, k, v = atten.W_q(xIn), atten.W_k(xIn), atten.W_v(xIn)
+# d = q.shape[1]
+# score = torch.bmm(q.transpose(1, 2), k) / math.sqrt(d)
+# fig,axes=plt.subplots(2,1)
+# im1=axes[0].imshow(k[0,:,:].detach().numpy())
+# im2=axes[1].imshow(k[0,:,:].detach().numpy())
+# fig.colorbar(im1)
+# fig.colorbar(im2)
+# fig.show()
+
+
+# matplotlib.rcParams.update({'font.size': 11})
+# matplotlib.rcParams.update({'lines.linewidth': 2})
+# matplotlib.rcParams.update({'lines.markersize': 12})
+# matplotlib.rcParams.update({'legend.fontsize': 11})
+
+# # attention layer
+# model.eval()
+
+
+# obs = dm.transOutY(yT[:, None])[:, 0]
+# pred = dm.transOutY(yOut[:, None])[:, 0]
+# fig, ax = plt.subplots(1, 1)
+# ax.plot(pred, obs, '.')
+# xlim = ax.get_xlim()
+# ylim = ax.get_ylim()
+# vmin = np.min([xlim[0], ylim[0]])
+# vmax = np.max([xlim[1], ylim[1]])
+# _ = ax.plot([vmin, vmax], [vmin, vmax], 'r-')
+# fig.show()
+
+# to site
+tempS = jInd[testInd]
+tempT = iInd[testInd]
+testSite = np.unique(tempS)
+siteLst = list()
+matResult = np.ndarray([len(testSite), 3])
+for i, k in enumerate(testSite):
+    ind = np.where(tempS == k)[0]
+    t = df.t[tempT[ind]]
+    siteName = df.siteIdLst[k]
+    siteLst.append([pred[ind], obs[ind], t])
+    matResult[i, 0] = np.mean(pred[ind])
+    matResult[i, 1] = np.mean(obs[ind])
+    matResult[i, 2] = np.corrcoef(pred[ind], obs[ind])[0, 1]
 
 
 # mean
+fig, ax = plt.subplots(1, 1)
 ax.plot(matResult[:, 0], matResult[:, 1], '*')
 xlim = ax.get_xlim()
 ylim = ax.get_ylim()
 vmin = np.min([xlim[0], ylim[0]])
 vmax = np.max([xlim[1], ylim[1]])
 _ = ax.plot([vmin, vmax], [vmin, vmax], 'r-')
+ax.set_title("Obs means per site (Poor sites)")
 fig.show()
 
-# correlation map
-import matplotlib.gridspec as gridspec
+rmse = np.sqrt(np.mean((matResult[:, 0] - matResult[:, 1]) ** 2))
+corrcoef = np.corrcoef(matResult[:, 0], matResult[:, 1])[0, 1]
+coef_det = r2_score(matResult[:, 0], matResult[:, 1])
+site_poor = [rmse, corrcoef, coef_det]
 
-trainSite = np.unique(jInd[trainInd])
-lat = df.lat[trainSite]
-lon = df.lon[trainSite]
-figM = plt.figure(figsize=(8, 6))
-gsM = gridspec.GridSpec(1, 1)
-axM = mapplot.mapPoint(
-    figM, gsM[0, 0], lat, lon, np.zeros(len(lat)), cmap='gray', cb=False
-)
-figM.show()
-
-lat = df.lat[testSite]
-lon = df.lon[testSite]
-figM = plt.figure(figsize=(8, 6))
-gsM = gridspec.GridSpec(1, 1)
-axM = mapplot.mapPoint(figM, gsM[0, 0], lat, lon, matResult[:, 2], s=50)
-figM.show()
+# rmse
+print("Obs mean per site")
+print("rmse", rmse)
+print("corrcoef", corrcoef)
+print("coef det", coef_det)
+print("")
 
 
-def funcM():
-    lat = df.lat[testSite]
-    lon = df.lon[testSite]
-    figM = plt.figure(figsize=(8, 6))
-    gsM = gridspec.GridSpec(1, 1)
-    axM = mapplot.mapPoint(figM, gsM[0, 0], lat, lon, matResult[:, 2], s=50)
-    figP, axP = plt.subplots(1, 1)
-    return figM, axM, figP, axP, lon, lat
 
-
-def funcP(iP, axP):
-    print(iP)
-    axP.plot(siteLst[iP][2], siteLst[iP][0], 'r*-', label='pred')
-    axP.plot(siteLst[iP][2], siteLst[iP][1], 'b*-', label='obs')
-    axP.legend()
-
-
-figplot.clickMap(funcM, funcP)
-
-# position encoding plot
-pos = torch.arange(-45, 45, dtype=torch.float32)/45
-pos=pos[None,:]
-nh=32
-P = torch.zeros([pos.shape[0], pos.shape[1], nh], dtype=torch.float32)
-for i in range(int(nh / 2)):
-    # P[:, :, 2 * i] = torch.sin(pos * (i + 1) * torch.pi)
-    # P[:, :, 2 * i + 1] = torch.cos(pos * (i + 1) * torch.pi)
-    P[:, :, 2 * i] = torch.sin(pos *rho/ 10000**((i + 1)/32) )
-    P[:, :, 2 * i + 1] = torch.cos(pos *rho/ 10000**((i + 1)/32) )
+# anomoly
 fig, ax = plt.subplots(1, 1)
-ax.imshow(P[0, :, :].detach().numpy(),extent=[0,32,-45,45])
+aLst, bLst = list(), list()
 
+# for site in siteLst:
+#     aLst.append(site[:, 0] - np.mean(site[:, 0]))
+#     bLst.append(site[:, 1] - np.mean(site[:, 1]))
+for site in siteLst:
+    aLst.append(site[0] - np.mean(site[0]))
+    bLst.append(site[1] - np.mean(site[1]))
+
+a, b = np.concatenate(aLst), np.concatenate(bLst)
+ax.plot(np.concatenate(aLst), np.concatenate(bLst), '.')
+xlim = ax.get_xlim()
+ylim = ax.get_ylim()
+vmin = np.min([xlim[0], ylim[0]])
+vmax = np.max([xlim[1], ylim[1]])
+_ = ax.plot([vmin, vmax], [vmin, vmax], 'r-')
+ax.set_title("Obs diff from site means (Poor sites)")
 fig.show()
+
+# rmse
+print("Obs diff from site means")
+rmse = np.sqrt(np.mean((a - b) ** 2))
+corrcoef = np.corrcoef(a,b)[0, 1]
+coef_det = r2_score(a, b)
+anomaly_poor = [rmse, corrcoef, coef_det]
+
+print("rmse", rmse)
+print("corrcoef", corrcoef)
+print("coef det", coef_det)
+print("")
+
+import pandas as pd
+data = {
+    "obs (quality)" : obs_quality,
+    "site (quality)" : site_quality,
+    "anomaly (quality)" : anomaly_quality,
+    "obs (poor)" : obs_poor,
+    "site (poor)" : site_poor,
+    "anomaly (poor)" : anomaly_poor,
+}
+df = pd.DataFrame(data)
+df.to_csv("metrics.csv")
 
 pdb.set_trace()
