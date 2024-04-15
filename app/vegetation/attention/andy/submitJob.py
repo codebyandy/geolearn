@@ -15,8 +15,8 @@ def submitJob(jobName, cmdLine, nH=8, nM=16):
         # fh.writelines('#SBATCH --partition=owners\n')
         fh.writelines('#SBATCH --mail-type=ALL\n')        
         fh.writelines('#SBATCH --mail-user=avhuynh@stanford.edu\n')
-        # if kPath.host == 'icme':
-        #     fh.writelines('source activate pytorch\n')
+        if kPath.host == 'icme':
+            fh.writelines('source activate pytorch\n')
         elif kPath.host == 'sherlock':
             fh.writelines(
                 'source /home/users/avhuynh/envs/pytorch/bin/activate\n')
