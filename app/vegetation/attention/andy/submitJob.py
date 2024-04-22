@@ -50,6 +50,16 @@ def submitJobGPU(jobName, cmdLine, nH=8, nM=16):
         fh.writelines(cmdLine)
     os.system('sbatch {}'.format(jobFile))
 
-jobname = "train_default"
-cmdLine = "python /home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/KUAI_TRAIN.py"
-submitJob(jobname, cmdLine)
+
+
+
+dropout_lst = [0.2, 0.4, 0.6, 0.8]
+nh_lst = [16, 24, 32]
+
+for dropout in dropout_lst:
+    for nh in nh_lst:
+        run_name = f'dropout_{dropout}_nh_{nh}'
+        train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/KUAI_TRAIN.py'
+        cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh}'
+        print(cmd_line)
+        # submitJob(run_name, cmdLine)

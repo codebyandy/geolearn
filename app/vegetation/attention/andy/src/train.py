@@ -123,68 +123,65 @@ def train(data_tuple, rho, nh, epochs, iters_per_epoch, learning_rate, sched_sta
     
 
 def main(args, saveFolder):
-    # load dataset
-    # with open(os.path.join(kPath.dirVeg, args.dataset), 'rb') as f:
-    #     data_folds = pickle.load(f)
-    with open("/Users/andyhuynh/Documents/lfmc/data/stratified_3_fold.pkl", 'rb') as f:
-        data_tuple = pickle.load(f)
+    # NEED TO BUILD THIS OUT
+    df, trainInd, testInd, nMat, pSLst, pLLst, pMLst, x, xc, yc = data_tuple
 
-    # loop thru folds for cross-validation
-    # for i, data_tuple in data_folds.items(): 
-    for i in range(3):
+    # load dataset splits
+    saveFolder = os.path.join(kPath.dirVeg, 'model', 'attention')
+    subsetFile = os.path.join(saveFolder, 'subset.json')
+    with open(subsetFile) as json_file:
+        dictSubset = json.load(json_file)
+    print("loaded dictSubset")
+
+    # if cross-validation: loop thru folds
+    # else: stop after first fold
+    for i in range(5):
         if not args.cross_val and i > 0:
-            break # stop after first fold if not doing cross-validation
+            break 
 
-        # logging setup
-        foldFolder = ""
         if not args.testing:
             wandb.init(dir=os.path.join(kPath.dirVeg),
                        config={"learning_rate": args.learning_rate, 
                                "epochs": args.epochs})
-            wandb.run.name = args.run + f"_{i}"
-            foldFolder = os.path.join(saveFolder, str(i))
-            os.mkdir(foldFolder)
+            wandb.run.name = args.run + f"_f{i}"
     
         # init and train model    
         model = train(data_tuple, args.rho, args.nh,
                         args.epochs, args.iters_per_epoch, args.learning_rate,
                         args.sched_start_epoch, args.inputs, args.out_method, args.testing,
-                        args.weights_path, args.device, foldFolder
+                        args.weights_path, args.device, saveFolder
                        )
         
         if not args.testing:
             wandb.run.finish()
-            torch.save(model.state_dict(), os.path.join(foldFolder, 'final_model'))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train model")
     # admin
-    parser.add_argument("--run", type=str, required=True)
+    parser.add_argument("--run_name", type=str, required=True)
     parser.add_argument("--testing", type=bool, default=False)
     parser.add_argument("--cross_val", type=bool, default=False)
     parser.add_argument("--weights_path", type=str, default="")
     parser.add_argument("--device", type=int, default=-1)
     # dataset 
-    parser.add_argument("--dataset", type=str, default="data_folds.pkl")
+    parser.add_argument("--dataset", type=str)
     parser.add_argument("--rho", type=int, default=45)
     parser.add_argument("--inputs", type=str, default="")
     # model
     parser.add_argument("--nh", type=int, default=32)
     parser.add_argument("--out_method", type=str, default="default")
     # training
-    parser.add_argument("--epochs", type=int, default=500)
+    parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument("--learning_rate", type=float, default=1e-2)
     parser.add_argument("--iters_per_epoch", type=int, default=20)
     parser.add_argument("--sched_start_epoch", type=int, default=200)
     args = parser.parse_args()
-
     
     # create save dir / save hyperparameters
     saveFolder = ""
     if not args.testing:
-        date = datetime.now().strftime('%y-%m-%d')
-        saveFolder = os.path.join(kPath.dirVeg, 'runs', f"{date}_{args.run}")
+        saveFolder = os.path.join(kPath.dirVeg, 'runs', f"{args.run}")
         
         if not os.path.exists(saveFolder):
             os.mkdir(saveFolder)
@@ -196,6 +193,5 @@ if __name__ == "__main__":
             tosave = vars(args)
             json.dump(tosave, f, indent=4)
 
-    
     main(args, saveFolder)
 

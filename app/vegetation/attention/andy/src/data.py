@@ -74,3 +74,59 @@ def randomSubset(data_tuple, rho, opt='train', batch=1000):
         torch.tensor(xc[indSel, :], dtype=torch.float32),
         torch.tensor(yc[indSel, 0], dtype=torch.float32),
     )
+
+
+def build_data_tuple():
+    rho = 45
+    dataName = 'singleDaily'
+    importlib.reload(hydroDL.data.dbVeg)
+    df = dbVeg.DataFrameVeg(dataName)
+    dm = DataModel(X=df.x, XC=df.xc, Y=df.y)
+    siteIdLst = df.siteIdLst
+    dm.trans(mtdDefault='minmax')
+    dataTup = dm.getData()
+    dataEnd, (iInd, jInd) = dataTs2Range(dataTup, rho, returnInd=True)
+    x, xc, y, yc = dataEnd
+    
+    iInd = np.array(iInd)
+    jInd = np.array(jInd)
+    
+    np.nanmean(dm.x[:, :, 0])
+    np.nanmax(df.x[:, :, 2])
+    
+    # calculate position
+    varS = ['VV', 'VH', 'vh_vv']
+    varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
+    varM = ['Fpar', 'Lai']
+    iS = [df.varX.index(var) for var in varS]
+    iL = [df.varX.index(var) for var in varL]
+    iM = [df.varX.index(var) for var in varM]
+    
+    pSLst, pLLst, pMLst = list(), list(), list()
+    ns = yc.shape[0]
+    nMat = np.zeros([yc.shape[0], 3])
+    for k in range(nMat.shape[0]):
+        tempS = x[:, k, iS]
+        pS = np.where(~np.isnan(tempS).any(axis=1))[0]
+        tempL = x[:, k, iL]
+        pL = np.where(~np.isnan(tempL).any(axis=1))[0]
+        tempM = x[:, k, iM]
+        pM = np.where(~np.isnan(tempM).any(axis=1))[0]
+        pSLst.append(pS)
+        pLLst.append(pL)
+        pMLst.append(pM)
+        nMat[k, :] = [len(pS), len(pL), len(pM)]
+    
+    np.where(nMat == 0)
+    np.sum((np.where(nMat == 0)[1]) == 0)
+    
+    indKeep = np.where((nMat > 0).all(axis=1))[0]
+    x = x[:, indKeep, :]
+    xc = xc[indKeep, :]
+    yc = yc[indKeep, :]
+    nMat = nMat[indKeep, :]
+    pSLst = [pSLst[k] for k in indKeep]
+    pLLst = [pLLst[k] for k in indKeep]
+    pMLst = [pMLst[k] for k in indKeep]
+
+    return (df, nMat, pSLst, pLLst, pMLst, x, xc, yc) 
