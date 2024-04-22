@@ -61,5 +61,5 @@ for dropout in dropout_lst:
         run_name = f'dropout_{dropout}_nh_{nh}'
         train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/KUAI_TRAIN.py'
         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh}'
-        print(cmd_line)
-        # submitJob(run_name, cmdLine)
+        # print(cmd_line)
+        submitJob(run_name, cmdLine)
