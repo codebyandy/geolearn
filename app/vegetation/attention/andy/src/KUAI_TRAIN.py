@@ -104,8 +104,9 @@ class FinalModel(nn.Module):
         self.nxc = nxc
         self.encoder = InputFeature(nTup, nxc, nh)
         self.atten = AttentionLayer(nh, nh)
-        self.addnorm1 = AddNorm(nh, 0.5)
-        self.addnorm2 = AddNorm(nh, 0.5)
+        self.addnorm1 = AddNorm(nh, DROPOUT)
+        self.addnorm2 = AddNorm(nh, DROPOUT)
+        print(DROPOUT)
         self.ffn1 = PositionWiseFFN(nh, nh)
         self.ffn2 = PositionWiseFFN(nh, 1)
         for p in self.parameters():
@@ -427,6 +428,8 @@ def train(args, saveFolder):
     nIterEp = args.iters_per_epoch
     sched_start_epoch = args.sched_start_epoch
     optimizer = args.optimizer
+    global DROPOUT
+    DROPOUT = args.dropout
     
     wandb.init(dir=os.path.join(kPath.dirVeg))
     wandb.run.name = run_name
@@ -621,6 +624,7 @@ if __name__ == "__main__":
     # model
     parser.add_argument("--nh", type=int, default=32)
     parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "sgd"])
+    parser.add_argument("--dropout", type=float, default=0.1)
     # parser.add_argument("--out_method", type=str, default="default")
     # training
     parser.add_argument("--epochs", type=int, default=1000)
