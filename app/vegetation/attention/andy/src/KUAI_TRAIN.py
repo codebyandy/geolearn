@@ -430,6 +430,8 @@ def train(args, saveFolder):
     optimizer = args.optimizer
     global DROPOUT
     DROPOUT = args.dropout
+    batch_size = args.batch_size
+    test_epoch = args.test_epoch
     
     wandb.init(dir=os.path.join(kPath.dirVeg))
     wandb.run.name = run_name
@@ -510,7 +512,7 @@ def train(args, saveFolder):
     bL = 6
     bM = 10
 
-    xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset()
+    xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train', batch=batch_size)
     nTup = (xS.shape[-1], xL.shape[-1], xM.shape[-1])
     lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
     
@@ -537,7 +539,7 @@ def train(args, saveFolder):
         metrics = {"train_loss" : 0, "train_RMSE" : 0, "train_rsq" : 0, "train_Rsq" : 0}
         for i in range(nIterEp):
             t0 = time.time()
-            xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset()
+            xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train', batch=batch_size)
             t1 = time.time()
             model.zero_grad()
             yP = model((xS, xL, xM), (pS, pL, pM), xcT, lTup)
@@ -560,7 +562,7 @@ def train(args, saveFolder):
         metrics = {metric : sum / nIterEp for metric, sum in metrics.items()}
         
         optimizer.zero_grad()
-        xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset('test')
+        xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='test', batch=1000)
         yP = model((xS, xL, xM), (pS, pL, pM), xcT, lTup)
         loss = loss_fn(yP, yT)
     
@@ -582,7 +584,7 @@ def train(args, saveFolder):
             )
         )
 
-        if ep > 0 and ep % 1 == 0:
+        if ep > 0 and ep % test_epoch == 0:
             test(df, testInd, testIndBelow, ep, metrics)
 
         wandb.log(metrics)
@@ -627,10 +629,12 @@ if __name__ == "__main__":
     parser.add_argument("--dropout", type=float, default=0.1)
     # parser.add_argument("--out_method", type=str, default="default")
     # training
+    parser.add_argument("--batch_size", type=int, default=1000)
     parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument("--learning_rate", type=float, default=1e-2)
     parser.add_argument("--iters_per_epoch", type=int, default=20)
     parser.add_argument("--sched_start_epoch", type=int, default=200)
+    parser.add_argument("--test_epoch", type=int, default=50)
     args = parser.parse_args()
     
     # create save dir / save hyperparameters
