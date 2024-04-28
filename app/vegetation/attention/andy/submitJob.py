@@ -63,3 +63,7 @@ for dropout in dropout_lst:
         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh}'
         # print(cmd_line)
         submitJob(run_name, cmd_line)
+
+
+learning_rate_lst = [1e-4, 1e-3, 1e-2]
+batch_size = [600, 800, 1000, 1200, 1400]

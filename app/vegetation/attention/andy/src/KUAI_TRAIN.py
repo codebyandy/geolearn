@@ -136,7 +136,9 @@ def train(args, saveFolder):
         # random sample within window
         varS = ['VV', 'VH', 'vh_vv']
         varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
-        varM = ['Fpar', 'Lai']
+        # varM = ["mod_b{}".format(x) for x in range(1, 8)]
+        varM = ["myd_b{}".format(x) for x in range(1, 8)]
+        # varM = ['Fpar', 'Lai']
         if opt == 'train':
             indSel = np.random.permutation(trainInd)[0:batch]
         else:
@@ -178,7 +180,9 @@ def train(args, saveFolder):
         model.eval()
         varS = ['VV', 'VH', 'vh_vv']
         varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
-        varM = ['Fpar', 'Lai']
+        # varM = ["mod_b{}".format(x) for x in range(1, 8)]
+        varM = ["myd_b{}".format(x) for x in range(1, 8)]
+        # varM = ['Fpar', 'Lai']
         iS = [df.varX.index(var) for var in varS]
         iL = [df.varX.index(var) for var in varL]
         iM = [df.varX.index(var) for var in varM]
@@ -286,7 +290,9 @@ def train(args, saveFolder):
         model.eval()
         varS = ['VV', 'VH', 'vh_vv']
         varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
-        varM = ['Fpar', 'Lai']
+        # varM = ["mod_b{}".format(x) for x in range(1, 8)]
+        varM = ["myd_b{}".format(x) for x in range(1, 8)]
+        # varM = ['Fpar', 'Lai']
         iS = [df.varX.index(var) for var in varS]
         iL = [df.varX.index(var) for var in varL]
         iM = [df.varX.index(var) for var in varM]
@@ -432,11 +438,11 @@ def train(args, saveFolder):
     DROPOUT = args.dropout
     batch_size = args.batch_size
     test_epoch = args.test_epoch
-    
-    wandb.init(dir=os.path.join(kPath.dirVeg))
-    wandb.run.name = run_name
-    
-    
+
+    if not args.testing:
+        wandb.init(dir=os.path.join(kPath.dirVeg))
+        wandb.run.name = run_name
+        
     dataName = 'singleDaily'
     importlib.reload(hydroDL.data.dbVeg)
     df = dbVeg.DataFrameVeg(dataName)
@@ -456,7 +462,9 @@ def train(args, saveFolder):
     # calculate position
     varS = ['VV', 'VH', 'vh_vv']
     varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
-    varM = ['Fpar', 'Lai']
+    # varM = ["mod_b{}".format(x) for x in range(1, 8)]
+    varM = ["myd_b{}".format(x) for x in range(1, 8)]
+    # varM = ['Fpar', 'Lai']
     iS = [df.varX.index(var) for var in varS]
     iL = [df.varX.index(var) for var in varL]
     iM = [df.varX.index(var) for var in varM]
@@ -587,7 +595,8 @@ def train(args, saveFolder):
         if ep > 0 and ep % test_epoch == 0:
             test(df, testInd, testIndBelow, ep, metrics)
 
-        wandb.log(metrics)
+        if not args.testing:
+            wandb.log(metrics)
         
     # test(df, testInd, testIndBelow, ep, metrics)
 
