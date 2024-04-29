@@ -53,17 +53,26 @@ def submitJobGPU(jobName, cmdLine, nH=8, nM=16):
 
 
 
-dropout_lst = [0.2, 0.4, 0.6, 0.8]
-nh_lst = [16, 24, 32]
+# dropout_lst = [0.2, 0.4, 0.6, 0.8]
+# nh_lst = [16, 24, 32]
 
-for dropout in dropout_lst:
-    for nh in nh_lst:
-        run_name = f'ex_aqua_dropout_{dropout}_nh_{nh}'
+# for dropout in dropout_lst:
+#     for nh in nh_lst:
+#         run_name = f'ex_aqua_dropout_{dropout}_nh_{nh}'
+#         train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/KUAI_TRAIN.py'
+#         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh}'
+#         # print(cmd_line)
+#         submitJob(run_name, cmd_line)
+
+dropout = 0.2
+nh = 24
+learning_rate_lst = [1e-4, 1e-3, 1e-2]
+batch_size_lst = [400, 600, 800, 1000]
+
+for lr in learning_rate_lst:
+    for batch_size in batch_size_lst:
+        run_name = f'ex_lr_{lr}_bs_{batch_size}'
         train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/KUAI_TRAIN.py'
-        cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh}'
+        cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh} --batch_size {batch_size} --learning_rate {lr}'
         # print(cmd_line)
         submitJob(run_name, cmd_line)
-
-
-learning_rate_lst = [1e-4, 1e-3, 1e-2]
-batch_size = [600, 800, 1000, 1200, 1400]
