@@ -106,7 +106,6 @@ class FinalModel(nn.Module):
         self.atten = AttentionLayer(nh, nh)
         self.addnorm1 = AddNorm(nh, DROPOUT)
         self.addnorm2 = AddNorm(nh, DROPOUT)
-        print(DROPOUT)
         self.ffn1 = PositionWiseFFN(nh, nh)
         self.ffn2 = PositionWiseFFN(nh, 1)
         for p in self.parameters():
@@ -132,7 +131,7 @@ class FinalModel(nn.Module):
 
 
 def train(args, saveFolder):
-    def randomSubset(opt='train', batch=1000):
+    def randomSubset(opt='train', batch=1000, sample=True):
         # random sample within window
         varS = ['VV', 'VH', 'vh_vv']
         varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
@@ -143,25 +142,37 @@ def train(args, saveFolder):
             indSel = np.random.permutation(trainInd)[0:batch]
         else:
             indSel = testInd
+
         iS = [df.varX.index(var) for var in varS]
         iL = [df.varX.index(var) for var in varL]
         iM = [df.varX.index(var) for var in varM]
         ns = len(indSel)
-        rS = np.random.randint(0, nMat[indSel, 0], [bS, ns]).T
-        rL = np.random.randint(0, nMat[indSel, 1], [bL, ns]).T
-        rM = np.random.randint(0, nMat[indSel, 2], [bM, ns]).T
-        pS = np.stack([pSLst[indSel[k]][rS[k, :]] for k in range(ns)], axis=0)
-        pL = np.stack([pLLst[indSel[k]][rL[k, :]] for k in range(ns)], axis=0)
-        pM = np.stack([pMLst[indSel[k]][rM[k, :]] for k in range(ns)], axis=0)
-        matS1 = x[:, indSel, :][:, :, iS]
-        matL1 = x[:, indSel, :][:, :, iL]
-        matM1 = x[:, indSel, :][:, :, iM]
-        xS = np.stack([matS1[pS[k, :], k, :] for k in range(ns)], axis=0)
-        xL = np.stack([matL1[pL[k, :], k, :] for k in range(ns)], axis=0)
-        xM = np.stack([matM1[pM[k, :], k, :] for k in range(ns)], axis=0)
+        if sample:
+            rS = np.random.randint(0, nMat[indSel, 0], [bS, ns]).T
+            rL = np.random.randint(0, nMat[indSel, 1], [bL, ns]).T
+            rM = np.random.randint(0, nMat[indSel, 2], [bM, ns]).T
+            pS = np.stack([pSLst[indSel[k]][rS[k, :]] for k in range(ns)], axis=0)
+            pL = np.stack([pLLst[indSel[k]][rL[k, :]] for k in range(ns)], axis=0)
+            pM = np.stack([pMLst[indSel[k]][rM[k, :]] for k in range(ns)], axis=0)
+            matS1 = x[:, indSel, :][:, :, iS]
+            matL1 = x[:, indSel, :][:, :, iL]
+            matM1 = x[:, indSel, :][:, :, iM]
+            xS = np.stack([matS1[pS[k, :], k, :] for k in range(ns)], axis=0)
+            xL = np.stack([matL1[pL[k, :], k, :] for k in range(ns)], axis=0)
+            xM = np.stack([matM1[pM[k, :], k, :] for k in range(ns)], axis=0)
+        else:
+            pS = np.stack([pSLst[indSel[k]] for k in range(ns)], axis=0)
+            pL = np.stack([pLLst[indSel[k]] for k in range(ns)], axis=0)
+            pM = np.stack([pMLst[indSel[k]] for k in range(ns)], axis=0)
+            xS = x[:, indSel, :][:, :, iS]
+            xL = x[:, indSel, :][:, :, iL]
+            xM = x[:, indSel, :][:, :, iM]
+            pdb.set_trace()
+        
         pS = (pS - rho) / rho
         pL = (pL - rho) / rho
         pM = (pM - rho) / rho
+        
         return (
             torch.tensor(xS, dtype=torch.float32),
             torch.tensor(xL, dtype=torch.float32),
@@ -205,7 +216,16 @@ def train(args, saveFolder):
             pM = torch.from_numpy(pM).float()
             xcT = torch.from_numpy(xcT).float()
             lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
-            yP = model((xS, xL, xM), (pS, pL, pM), xcT, lTup)
+
+            xTup, pTup = (), ()
+            if satellites == "no_landsat":
+                xTup = (xS, xM)
+                pTup = (pS, pM)
+            else:
+                xTup = (xS, xL, xM)
+                pTup = (pS, pL, pM)
+            
+            yP = model(xTup, pTup, xcT, lTup)
             yOut[k] = yP.detach().numpy()
         
         yT = yc[testInd, 0]    
@@ -438,6 +458,7 @@ def train(args, saveFolder):
     DROPOUT = args.dropout
     batch_size = args.batch_size
     test_epoch = args.test_epoch
+    satellites = args.satellites
 
     if not args.testing:
         wandb.init(dir=os.path.join(kPath.dirVeg))
@@ -521,14 +542,19 @@ def train(args, saveFolder):
     bM = 10
 
     xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train', batch=batch_size)
-    nTup = (xS.shape[-1], xL.shape[-1], xM.shape[-1])
-    lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
+
+    nTup, lTup = (), ()
+    if satellites == "no_landsat":
+        print("no landsat model")
+        nTup = (xS.shape[-1], xM.shape[-1])
+        lTup = (xS.shape[1], xM.shape[1])
+    else:
+        nTup = (xS.shape[-1], xL.shape[-1], xM.shape[-1])
+        lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
     
-    # nTup = (xS.shape[-1], xL.shape[-1])
     nxc = xc.shape[-1]
     model = FinalModel(nTup, nxc, nh)
-    yP = model((xS, xL, xM), (pS, pL, pM), xcT, lTup)
-    # yP = model((xS, xL), (pS, pL))
+    # yP = model(xTup, pTup, xcT, lTup)
     
     loss_fn = nn.L1Loss(reduction='mean')
 
@@ -550,7 +576,16 @@ def train(args, saveFolder):
             xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train', batch=batch_size)
             t1 = time.time()
             model.zero_grad()
-            yP = model((xS, xL, xM), (pS, pL, pM), xcT, lTup)
+
+            xTup, pTup = (), ()
+            if satellites == "no_landsat":
+                xTup = (xS, xM)
+                pTup = (pS, pM)
+            else:
+                xTup = (xS, xL, xM)
+                pTup = (pS, pL, pM)
+            
+            yP = model(xTup, pTup, xcT, lTup)
             loss = loss_fn(yP, yT)
             loss.backward()
             t2 = time.time()
@@ -571,7 +606,16 @@ def train(args, saveFolder):
         
         optimizer.zero_grad()
         xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='test', batch=1000)
-        yP = model((xS, xL, xM), (pS, pL, pM), xcT, lTup)
+
+        xTup, pTup = (), ()
+        if satellites == "no_landsat":
+            xTup = (xS, xM)
+            pTup = (pS, pM)
+        else:
+            xTup = (xS, xL, xM)
+            pTup = (pS, pL, pM)
+        
+        yP = model(xTup, pTup, xcT, lTup)
         loss = loss_fn(yP, yT)
     
         metrics["test_loss"] = loss_fn(yP, yT).item()
@@ -631,12 +675,11 @@ if __name__ == "__main__":
     # dataset 
     parser.add_argument("--dataset", type=str)
     parser.add_argument("--rho", type=int, default=45)
-    # parser.add_argument("--inputs", type=str, default="")
+    parser.add_argument("--satellites", type=str, default="no_landsat")
     # model
     parser.add_argument("--nh", type=int, default=32)
     parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "sgd"])
     parser.add_argument("--dropout", type=float, default=0.1)
-    # parser.add_argument("--out_method", type=str, default="default")
     # training
     parser.add_argument("--batch_size", type=int, default=1000)
     parser.add_argument("--epochs", type=int, default=1000)
