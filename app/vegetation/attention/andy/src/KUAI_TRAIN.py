@@ -215,20 +215,23 @@ def train(args, saveFolder):
             pL = torch.from_numpy(pL).float()
             pM = torch.from_numpy(pM).float()
             xcT = torch.from_numpy(xcT).float()
-            lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
 
-            xTup, pTup = (), ()
+            xTup, pTup, lTup = (), (), ()
             if satellites == "no_landsat":
                 xTup = (xS, xM)
                 pTup = (pS, pM)
+                lTup = (xS.shape[1], xM.shape[1])
             else:
                 xTup = (xS, xL, xM)
                 pTup = (pS, pL, pM)
+                lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
             
             yP = model(xTup, pTup, xcT, lTup)
+            
             yOut[k] = yP.detach().numpy()
         
         yT = yc[testInd, 0]    
+        
         obs = dm.transOutY(yT[:, None])[:, 0]
         pred = dm.transOutY(yOut[:, None])[:, 0]
         
@@ -334,8 +337,18 @@ def train(args, saveFolder):
             pL = torch.from_numpy(pL).float()
             pM = torch.from_numpy(pM).float()
             xcT = torch.from_numpy(xcT).float()
-            lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
-            yP = model((xS, xL, xM), (pS, pL, pM), xcT, lTup)
+
+            xTup, pTup, lTup = (), (), ()
+            if satellites == "no_landsat":
+                xTup = (xS, xM)
+                pTup = (pS, pM)
+                lTup = (xS.shape[1], xM.shape[1])
+            else:
+                xTup = (xS, xL, xM)
+                pTup = (pS, pL, pM)
+                lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
+            
+            yP = model(xTup, pTup, xcT, lTup)
             yOut[k] = yP.detach().numpy()
         
         yT = yc[testInd, 0]
@@ -585,7 +598,7 @@ def train(args, saveFolder):
                 xTup = (xS, xL, xM)
                 pTup = (pS, pL, pM)
             
-            yP = model(xTup, pTup, xcT, lTup)
+            yP = model(xTup, pTup, xcT, lTup)      
             loss = loss_fn(yP, yT)
             loss.backward()
             t2 = time.time()
