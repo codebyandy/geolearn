@@ -67,12 +67,14 @@ class AttentionLayer(nn.Module):
         self.W_o = nn.Linear(nh, nh, bias=False)
 
     def forward(self, x):
+        # pdb.set_trace()
         q, k, v = self.W_q(x), self.W_k(x), self.W_v(x)
         d = q.shape[1]
-        score = torch.bmm(q.transpose(1, 2), k) / math.sqrt(d)
-        attention = torch.softmax(score, dim=-1)
-        out = torch.bmm(attention, v.transpose(1, 2))
-        out = self.W_o(out.transpose(1, 2))
+        score = torch.bmm(q, k.transpose(1, 2)) / math.sqrt(d)
+        attention_mask = torch.ones(score.shape)
+        attention = torch.softmax(score * attention_mask, dim=-1)
+        out = torch.bmm(attention, v)
+        out = self.W_o(out)
         return out
 
 
@@ -160,6 +162,7 @@ def train(args, saveFolder):
             xS = np.stack([matS1[pS[k, :], k, :] for k in range(ns)], axis=0)
             xL = np.stack([matL1[pL[k, :], k, :] for k in range(ns)], axis=0)
             xM = np.stack([matM1[pM[k, :], k, :] for k in range(ns)], axis=0)
+            # pdb.set_trace()
         else:
             pS = np.stack([pSLst[indSel[k]] for k in range(ns)], axis=0)
             pL = np.stack([pLLst[indSel[k]] for k in range(ns)], axis=0)
@@ -207,6 +210,7 @@ def train(args, saveFolder):
             pS = (pSLst[ind][None, ...] - rho) / rho
             pL = (pLLst[ind][None, ...] - rho) / rho
             pM = (pMLst[ind][None, ...] - rho) / rho
+            print(pS.shape)
             xcT = xc[ind][None, ...]
             xS = torch.from_numpy(xS).float()
             xL = torch.from_numpy(xL).float()
@@ -688,7 +692,7 @@ if __name__ == "__main__":
     # dataset 
     parser.add_argument("--dataset", type=str)
     parser.add_argument("--rho", type=int, default=45)
-    parser.add_argument("--satellites", type=str, default="no_landsat")
+    parser.add_argument("--satellites", type=str, default="all")
     # model
     parser.add_argument("--nh", type=int, default=32)
     parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "sgd"])
