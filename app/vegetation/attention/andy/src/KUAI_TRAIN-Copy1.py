@@ -40,6 +40,7 @@ class InputFeature(nn.Module):
             )
 
     def getPos(self, pos):
+        pos = torch.stack([torch.arange(91) for i in range(1000)])
         nh = self.nh
         P = torch.zeros([pos.shape[0], pos.shape[1], nh], dtype=torch.float32)
         for i in range(int(nh / 2)):
@@ -66,13 +67,15 @@ class AttentionLayer(nn.Module):
         self.W_v = nn.Linear(nx, nh, bias=False)
         self.W_o = nn.Linear(nh, nh, bias=False)
 
-    def forward(self, x):
-        # pdb.set_trace()
+    def forward(self, x, mask):
         q, k, v = self.W_q(x), self.W_k(x), self.W_v(x)
         d = q.shape[1]
         score = torch.bmm(q, k.transpose(1, 2)) / math.sqrt(d)
-        attention_mask = torch.ones(score.shape)
-        attention = torch.softmax(score * attention_mask, dim=-1)
+
+        attention_mask = torch.stack([torch.outer(mask[i, :], mask[i, :]) for i in range(mask.shape[0])])
+        score[attention_mask == 0] = -1e9
+        attention = torch.softmax(score, dim=-1)
+    
         out = torch.bmm(attention, v)
         out = self.W_o(out)
         return out
@@ -114,9 +117,9 @@ class FinalModel(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, x, pos, xcT, lTup):
+    def forward(self, x, pos, xcT, lTup, mask):
         xIn = self.encoder(x, pos, xcT)
-        out = self.atten(xIn)
+        out = self.atten(xIn, mask)
         out = self.addnorm1(xIn, out)
         out = self.ffn1(out)
         out = self.addnorm2(xIn, out)
@@ -153,32 +156,53 @@ def train(args, saveFolder):
         rS = np.random.randint(0, nMat[indSel, 0], [bS, ns]).T
         rL = np.random.randint(0, nMat[indSel, 1], [bL, ns]).T
         rM = np.random.randint(0, nMat[indSel, 2], [bM, ns]).T
-        pS = np.stack([pSLst[indSel[k]][rS[k, :]] for k in range(ns)], axis=0)
-        pL = np.stack([pLLst[indSel[k]][rL[k, :]] for k in range(ns)], axis=0)
-        pM = np.stack([pMLst[indSel[k]][rM[k, :]] for k in range(ns)], axis=0)
-        matS1 = x[:, indSel, :][:, :, iS]
-        matL1 = x[:, indSel, :][:, :, iL]
-        matM1 = x[:, indSel, :][:, :, iM]
-        xS = np.stack([matS1[pS[k, :], k, :] for k in range(ns)], axis=0)
-        xL = np.stack([matL1[pL[k, :], k, :] for k in range(ns)], axis=0)
-        xM = np.stack([matM1[pM[k, :], k, :] for k in range(ns)], axis=0)
-        
-        pS = (pS - rho) / rho
-        pL = (pL - rho) / rho
-        pM = (pM - rho) / rho
+        pS = np.stack([np.arange(91) for k in range(ns)], axis=0)
+        pL = np.stack([np.arange(91) for k in range(ns)], axis=0)
+        pM = np.stack([np.arange(91) for k in range(ns)], axis=0)
+        # pS = np.stack([pSLst[indSel[k]][rS[k, :]] for k in range(ns)], axis=0)
+        # pL = np.stack([pLLst[indSel[k]][rL[k, :]] for k in range(ns)], axis=0)
+        # pM = np.stack([pMLst[indSel[k]][rM[k, :]] for k in range(ns)], axis=0)
+        xS = x[:, indSel, :][:, :, iS]
+        xL= x[:, indSel, :][:, :, iL]
+        xM = x[:, indSel, :][:, :, iM]
+        t1 = time.time()
+        xS = np.transpose(xS, (1, 0, 2))
+        xL = np.transpose(xL, (1, 0, 2))
+        xM = np.transpose(xM, (1, 0, 2))
+        t2 = time.time()
+        xS = np.nan_to_num(xS, nan=0)
+        xL = np.nan_to_num(xL, nan=0)
+        xM = np.nan_to_num(xM, nan=0)
+        t3 = time.time()
+    
+        # xS = np.stack([matS1[pS[k, :], k, :] for k in range(ns)], axis=0)
+        # xL = np.stack([matL1[pL[k, :], k, :] for k in range(ns)], axis=0)
+        # xM = np.stack([matM1[pM[k, :], k, :] for k in range(ns)], axis=0)
+        mask = []
+        for k in range(ns):
+            daysS_k = np.zeros(91)
+            daysS_k[pSLst[indSel[k]]] = 1
+            daysL_k = np.zeros(91)
+            daysL_k[pLLst[indSel[k]]] = 1
+            daysM_k = np.zeros(91)
+            daysM_k[pMLst[indSel[k]]] = 1
+            mask_k = np.concatenate([daysS_k, daysL_k, daysM_k, [1]])
+            mask.append(mask_k)
+        mask = np.stack(mask)
         
         return (
             torch.tensor(xS, dtype=torch.float32),
             torch.tensor(xL, dtype=torch.float32),
             torch.tensor(xM, dtype=torch.float32),
-            torch.tensor(pS, dtype=torch.float32),
-            torch.tensor(pL, dtype=torch.float32),
-            torch.tensor(pM, dtype=torch.float32),
-            # torch.tensor(dS, dtype=torch.int),
-            # torch.tensor(dL, dtype=torch.int),
-            # torch.tensor(dM, dtype=torch.int),
+            None,
+            None,
+            None,
+            # torch.tensor(pS, dtype=torch.float32),
+            # torch.tensor(pL, dtype=torch.float32),
+            # torch.tensor(pM, dtype=torch.float32),
             torch.tensor(xc[indSel, :], dtype=torch.float32),
             torch.tensor(yc[indSel, 0], dtype=torch.float32),
+            torch.tensor(mask, dtype=torch.int)
         )
     
 
@@ -551,7 +575,7 @@ def train(args, saveFolder):
     bL = 6
     bM = 10
 
-    xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train', batch=batch_size, sample=args.sample)
+    xS, xL, xM, pS, pL, pM, xcT, yT, mask = randomSubset(opt='train', batch=batch_size, sample=args.sample)
 
     nTup, lTup = (), ()
     if satellites == "no_landsat":
@@ -582,9 +606,10 @@ def train(args, saveFolder):
         lossEp = 0
         metrics = {"train_loss" : 0, "train_RMSE" : 0, "train_rsq" : 0, "train_Rsq" : 0}
         for i in range(nIterEp):
+            print(i)
             t0 = time.time()
-            xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train', batch=batch_size, sample=args.sample)
-            print(xS.shape, xL.shape, xM.shape, pS.shape, pL.shape, pM.shape, xcT.shape, yT.shape)
+            xS, xL, xM, pS, pL, pM, xcT, yT, mask = randomSubset(opt='train', batch=batch_size, sample=args.sample)
+            # print(xS.shape, xL.shape, xM.shape, pS.shape, pL.shape, pM.shape, xcT.shape, yT.shape)
             t1 = time.time()
             model.zero_grad()
 
@@ -596,7 +621,7 @@ def train(args, saveFolder):
                 xTup = (xS, xL, xM)
                 pTup = (pS, pL, pM)
             
-            yP = model(xTup, pTup, xcT, lTup)      
+            yP = model(xTup, pTup, xcT, lTup, mask)      
             loss = loss_fn(yP, yT)
             loss.backward()
             t2 = time.time()
@@ -616,7 +641,7 @@ def train(args, saveFolder):
         metrics = {metric : sum / nIterEp for metric, sum in metrics.items()}
         
         optimizer.zero_grad()
-        xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='test', batch=1000, sample=args.sample)
+        xS, xL, xM, pS, pL, pM, xcT, yT, mask = randomSubset(opt='test', batch=1000, sample=args.sample)
 
         xTup, pTup = (), ()
         if satellites == "no_landsat":
