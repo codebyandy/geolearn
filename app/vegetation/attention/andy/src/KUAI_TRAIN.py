@@ -138,8 +138,9 @@ def train(args, saveFolder):
         varS = ['VV', 'VH', 'vh_vv']
         varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
         # varM = ["mod_b{}".format(x) for x in range(1, 8)]
-        varM = ["myd_b{}".format(x) for x in range(1, 8)]
+        # varM = ["myd_b{}".format(x) for x in range(1, 8)]
         # varM = ['Fpar', 'Lai']
+        varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
         if opt == 'train':
             indSel = np.random.permutation(trainInd)[0:batch]
         else:
@@ -174,9 +175,6 @@ def train(args, saveFolder):
             torch.tensor(pS, dtype=torch.float32),
             torch.tensor(pL, dtype=torch.float32),
             torch.tensor(pM, dtype=torch.float32),
-            # torch.tensor(dS, dtype=torch.int),
-            # torch.tensor(dL, dtype=torch.int),
-            # torch.tensor(dM, dtype=torch.int),
             torch.tensor(xc[indSel, :], dtype=torch.float32),
             torch.tensor(yc[indSel, 0], dtype=torch.float32),
         )
@@ -189,8 +187,9 @@ def train(args, saveFolder):
         varS = ['VV', 'VH', 'vh_vv']
         varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
         # varM = ["mod_b{}".format(x) for x in range(1, 8)]
-        varM = ["myd_b{}".format(x) for x in range(1, 8)]
+        # varM = ["myd_b{}".format(x) for x in range(1, 8)]
         # varM = ['Fpar', 'Lai']
+        varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
         iS = [df.varX.index(var) for var in varS]
         iL = [df.varX.index(var) for var in varL]
         iM = [df.varX.index(var) for var in varM]
@@ -311,8 +310,9 @@ def train(args, saveFolder):
         varS = ['VV', 'VH', 'vh_vv']
         varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
         # varM = ["mod_b{}".format(x) for x in range(1, 8)]
-        varM = ["myd_b{}".format(x) for x in range(1, 8)]
+        # varM = ["myd_b{}".format(x) for x in range(1, 8)]
         # varM = ['Fpar', 'Lai']
+        varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
         iS = [df.varX.index(var) for var in varS]
         iL = [df.varX.index(var) for var in varL]
         iM = [df.varX.index(var) for var in varM]
@@ -474,7 +474,7 @@ def train(args, saveFolder):
         wandb.init(dir=os.path.join(kPath.dirVeg))
         wandb.run.name = run_name
         
-    dataName = 'singleDaily'
+    dataName = args.dataset
     importlib.reload(hydroDL.data.dbVeg)
     df = dbVeg.DataFrameVeg(dataName)
     dm = DataModel(X=df.x, XC=df.xc, Y=df.y)
@@ -487,15 +487,17 @@ def train(args, saveFolder):
     iInd = np.array(iInd)
     jInd = np.array(jInd)
     
-    np.nanmean(dm.x[:, :, 0])
-    np.nanmax(df.x[:, :, 2])
+    # np.nanmean(dm.x[:, :, 0])
+    # np.nanmax(df.x[:, :, 2])
     
     # calculate position
     varS = ['VV', 'VH', 'vh_vv']
     varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
     # varM = ["mod_b{}".format(x) for x in range(1, 8)]
-    varM = ["myd_b{}".format(x) for x in range(1, 8)]
+    # varM = ["myd_b{}".format(x) for x in range(1, 8)]
     # varM = ['Fpar', 'Lai']
+    varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
+
     iS = [df.varX.index(var) for var in varS]
     iL = [df.varX.index(var) for var in varL]
     iM = [df.varX.index(var) for var in varM]
@@ -514,6 +516,8 @@ def train(args, saveFolder):
         pLLst.append(pL)
         pMLst.append(pM)
         nMat[k, :] = [len(pS), len(pL), len(pM)]
+
+    pdb.set_trace()
     
     np.where(nMat == 0)
     np.sum((np.where(nMat == 0)[1]) == 0)
@@ -584,7 +588,6 @@ def train(args, saveFolder):
         for i in range(nIterEp):
             t0 = time.time()
             xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train', batch=batch_size, sample=args.sample)
-            print(xS.shape, xL.shape, xM.shape, pS.shape, pL.shape, pM.shape, xcT.shape, yT.shape)
             t1 = time.time()
             model.zero_grad()
 
@@ -684,7 +687,7 @@ if __name__ == "__main__":
     parser.add_argument("--weights_path", type=str, default="")
     parser.add_argument("--device", type=int, default=-1)
     # dataset 
-    parser.add_argument("--dataset", type=str)
+    parser.add_argument("--dataset", type=str, default="singleDaily", choices=["singleDaily", "singleDaily-modisgrid", "singleDaily-nadgrid"])
     parser.add_argument("--rho", type=int, default=45)
     parser.add_argument("--satellites", type=str, default="all")
     # model
