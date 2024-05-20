@@ -58,14 +58,14 @@ def submitJobGPU(jobName, cmdLine, nH=8, nM=16):
 # cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh}'
 # submitJob(run_name, cmd_line)
     
-dropout_lst = [0.2, 0.4, 0.6, 0.8]
-nh_lst = [16, 24, 32]
+dropout_lst = [0.2, 0.4, 0.6]
+nh_lst = [24, 32]
 
 for dropout in dropout_lst:
     for nh in nh_lst:
         run_name = f'500m_no_landsat_do_{dropout}_nh_{nh}'
-        train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/KUAI_TRAIN.py'
-        cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh} --epochs 1500 --dataset singleDaily-nadgrid --satellites no_landsat'
+        train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/train_no_sampling.py'
+        cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh} --epochs 1000 --dataset singleDaily-nadgrid --test_epoch 10'
         # print(cmd_line)
         submitJob(run_name, cmd_line)
 

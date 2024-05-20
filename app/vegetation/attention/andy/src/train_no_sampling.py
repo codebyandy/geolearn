@@ -43,6 +43,9 @@ class InputFeature(nn.Module):
         nh = self.nh
         P = torch.zeros([xTup.shape[0], xTup.shape[1], nh], dtype=torch.float32)
         pos = torch.arange(91) - 45
+        # print(xTup.shape)
+        # print(P.shape)
+        # print(pos.shape)
         for i in range(int(nh / 2)):
             P[:, :, 2 * i] = torch.sin(pos / (i + 1) * torch.pi)
             P[:, :, 2 * i + 1] = torch.cos(pos / (i + 1) * torch.pi)
@@ -142,9 +145,9 @@ def train(args, saveFolder):
         varS = ['VV', 'VH', 'vh_vv']
         varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
         # varM = ["mod_b{}".format(x) for x in range(1, 8)]
-        varM = ["myd_b{}".format(x) for x in range(1, 8)]
+        # varM = ["myd_b{}".format(x) for x in range(1, 8)]
         # varM = ['Fpar', 'Lai']
-        # varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
+        varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
         if opt == 'train':
             indSel = np.random.permutation(trainInd)[0:batch]
         else:
@@ -188,9 +191,9 @@ def train(args, saveFolder):
         varS = ['VV', 'VH', 'vh_vv']
         varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
         # varM = ["mod_b{}".format(x) for x in range(1, 8)]
-        varM = ["myd_b{}".format(x) for x in range(1, 8)]
+        # varM = ["myd_b{}".format(x) for x in range(1, 8)]
         # varM = ['Fpar', 'Lai']
-        # varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
+        varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
         iS = [df.varX.index(var) for var in varS]
         iL = [df.varX.index(var) for var in varL]
         iM = [df.varX.index(var) for var in varM]
@@ -321,30 +324,42 @@ def train(args, saveFolder):
         varS = ['VV', 'VH', 'vh_vv']
         varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
         # varM = ["mod_b{}".format(x) for x in range(1, 8)]
-        varM = ["myd_b{}".format(x) for x in range(1, 8)]
+        # varM = ["myd_b{}".format(x) for x in range(1, 8)]
         # varM = ['Fpar', 'Lai']
-        # varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
+        varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
         iS = [df.varX.index(var) for var in varS]
         iL = [df.varX.index(var) for var in varL]
         iM = [df.varX.index(var) for var in varM]
         yOut = np.zeros(len(testInd))
+
+        
         
         for k, ind in enumerate(testInd):
             k
-            xS = x[pSLst[ind], ind, :][:, iS][None, ...]
-            xL = x[pLLst[ind], ind, :][:, iL][None, ...]
-            xM = x[pMLst[ind], ind, :][:, iM][None, ...]
-            pS = (pSLst[ind][None, ...] - rho) / rho
-            pL = (pLLst[ind][None, ...] - rho) / rho
-            pM = (pMLst[ind][None, ...] - rho) / rho
+            matS1 = x[:, ind, :][:, iS]
+            matL1 = x[:, ind, :][:, iL]
+            matM1 = x[:, ind, :][:, iM]
+            xS = matS1[None, ...]
+            xL = matL1[None, ...]
+            xM = matM1[None, ...]
+            # xS = np.swapaxes(matS1, 0, 1)
+            # xL = np.swapaxes(matL1, 0, 1)
+            # xM = np.swapaxes(matM1, 0, 1)
+    
+            maskS1 = ~np.isnan(xS[:, :, 0])
+            maskL1 = ~np.isnan(xL[:, :, 0])
+            maskM1 = ~np.isnan(xM[:, :, 0])
+            xS[np.isnan(xS)] = 0
+            xL[np.isnan(xL)] = 0
+            xM[np.isnan(xM)] = 0
+            mask = np.concatenate((maskS1, maskL1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+       
             xcT = xc[ind][None, ...]
             xS = torch.from_numpy(xS).float()
             xL = torch.from_numpy(xL).float()
             xM = torch.from_numpy(xM).float()
-            pS = torch.from_numpy(pS).float()
-            pL = torch.from_numpy(pL).float()
-            pM = torch.from_numpy(pM).float()
             xcT = torch.from_numpy(xcT).float()
+            mask = torch.from_numpy(mask).int()
 
             xTup, pTup, lTup = (), (), ()
             if satellites == "no_landsat":
@@ -505,9 +520,9 @@ def train(args, saveFolder):
     varS = ['VV', 'VH', 'vh_vv']
     varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
     # varM = ["mod_b{}".format(x) for x in range(1, 8)]
-    varM = ["myd_b{}".format(x) for x in range(1, 8)]
+    # varM = ["myd_b{}".format(x) for x in range(1, 8)]
     # varM = ['Fpar', 'Lai']
-    # varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
+    varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
 
     iS = [df.varX.index(var) for var in varS]
     iL = [df.varX.index(var) for var in varL]
