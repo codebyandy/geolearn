@@ -65,7 +65,7 @@ for dropout in dropout_lst:
     for nh in nh_lst:
         run_name = f'500m_do_{dropout}_nh_{nh}'
         train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/KUAI_TRAIN.py'
-        cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh} --epochs 1500 --dataset singleDaily-nadgrid'
+        cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh} --epochs 1500 --dataset singleDaily-nadgrid --satellites no_landsat'
         # print(cmd_line)
         submitJob(run_name, cmd_line)
 
