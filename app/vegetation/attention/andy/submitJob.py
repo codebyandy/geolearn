@@ -63,7 +63,7 @@ nh_lst = [24, 32]
 
 for dropout in dropout_lst:
     for nh in nh_lst:
-        run_name = f'500m_no_landsat_do_{dropout}_nh_{nh}'
+        run_name = f'no_sampling_do_{dropout}_nh_{nh}'
         train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/train_no_sampling.py'
         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh} --epochs 1000 --dataset singleDaily-nadgrid --test_epoch 10'
         # print(cmd_line)
