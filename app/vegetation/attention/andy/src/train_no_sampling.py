@@ -39,19 +39,19 @@ class InputFeature(nn.Module):
                 nn.Sequential(nn.Linear(n, nh), nn.ReLU(), nn.Linear(nh, nh))
             )
 
-    def getPos(self, pos):
-        pos = torch.stack([torch.arange(91) for i in range(1000)])
+    def getPos(self, xTup):
         nh = self.nh
-        P = torch.zeros([pos.shape[0], pos.shape[1], nh], dtype=torch.float32)
+        P = torch.zeros([xTup.shape[0], xTup.shape[1], nh], dtype=torch.float32)
+        pos = torch.arange(91) - 45
         for i in range(int(nh / 2)):
             P[:, :, 2 * i] = torch.sin(pos / (i + 1) * torch.pi)
             P[:, :, 2 * i + 1] = torch.cos(pos / (i + 1) * torch.pi)
         return P
 
-    def forward(self, xTup, pTup, xc):
+    def forward(self, xTup, xc):
         outLst = list()
         for k in range(len(xTup)):
-            x = self.lnLst[k](xTup[k]) + self.getPos(pTup[k])
+            x = self.lnLst[k](xTup[k]) + self.getPos(xTup[k])
             outLst.append(x)
         outC = self.lnXc(xc)
         out = torch.cat(outLst + [outC[:, None, :]], dim=1)
@@ -72,10 +72,11 @@ class AttentionLayer(nn.Module):
         d = q.shape[1]
         score = torch.bmm(q, k.transpose(1, 2)) / math.sqrt(d)
 
-        attention_mask = torch.stack([torch.outer(mask[i, :], mask[i, :]) for i in range(mask.shape[0])])
-        score[attention_mask == 0] = -1e9
+        batch_size, num_days = mask.shape
+        extended_mask = mask.repeat(1, 1, num_days).reshape(batch_size, num_days, num_days)
+        score[extended_mask == 0] = -np.inf
         attention = torch.softmax(score, dim=-1)
-    
+        
         out = torch.bmm(attention, v)
         out = self.W_o(out)
         return out
@@ -117,8 +118,8 @@ class FinalModel(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, x, pos, xcT, lTup, mask):
-        xIn = self.encoder(x, pos, xcT)
+    def forward(self, x, xcT, lTup, mask):
+        xIn = self.encoder(x, xcT)
         out = self.atten(xIn, mask)
         out = self.addnorm1(xIn, out)
         out = self.ffn1(out)
@@ -136,13 +137,14 @@ class FinalModel(nn.Module):
 
 
 def train(args, saveFolder):
-    def randomSubset(opt='train', batch=1000, sample=False):
+    def randomSubset(opt='train', batch=1000):
         # random sample within window
         varS = ['VV', 'VH', 'vh_vv']
         varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
         # varM = ["mod_b{}".format(x) for x in range(1, 8)]
         varM = ["myd_b{}".format(x) for x in range(1, 8)]
         # varM = ['Fpar', 'Lai']
+        # varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
         if opt == 'train':
             indSel = np.random.permutation(trainInd)[0:batch]
         else:
@@ -153,53 +155,26 @@ def train(args, saveFolder):
         iM = [df.varX.index(var) for var in varM]
         ns = len(indSel)
         
-        rS = np.random.randint(0, nMat[indSel, 0], [bS, ns]).T
-        rL = np.random.randint(0, nMat[indSel, 1], [bL, ns]).T
-        rM = np.random.randint(0, nMat[indSel, 2], [bM, ns]).T
-        pS = np.stack([np.arange(91) for k in range(ns)], axis=0)
-        pL = np.stack([np.arange(91) for k in range(ns)], axis=0)
-        pM = np.stack([np.arange(91) for k in range(ns)], axis=0)
-        # pS = np.stack([pSLst[indSel[k]][rS[k, :]] for k in range(ns)], axis=0)
-        # pL = np.stack([pLLst[indSel[k]][rL[k, :]] for k in range(ns)], axis=0)
-        # pM = np.stack([pMLst[indSel[k]][rM[k, :]] for k in range(ns)], axis=0)
-        xS = x[:, indSel, :][:, :, iS]
-        xL= x[:, indSel, :][:, :, iL]
-        xM = x[:, indSel, :][:, :, iM]
-        t1 = time.time()
-        xS = np.transpose(xS, (1, 0, 2))
-        xL = np.transpose(xL, (1, 0, 2))
-        xM = np.transpose(xM, (1, 0, 2))
-        t2 = time.time()
-        xS = np.nan_to_num(xS, nan=0)
-        xL = np.nan_to_num(xL, nan=0)
-        xM = np.nan_to_num(xM, nan=0)
-        t3 = time.time()
-    
-        # xS = np.stack([matS1[pS[k, :], k, :] for k in range(ns)], axis=0)
-        # xL = np.stack([matL1[pL[k, :], k, :] for k in range(ns)], axis=0)
-        # xM = np.stack([matM1[pM[k, :], k, :] for k in range(ns)], axis=0)
-        mask = []
-        for k in range(ns):
-            daysS_k = np.zeros(91)
-            daysS_k[pSLst[indSel[k]]] = 1
-            daysL_k = np.zeros(91)
-            daysL_k[pLLst[indSel[k]]] = 1
-            daysM_k = np.zeros(91)
-            daysM_k[pMLst[indSel[k]]] = 1
-            mask_k = np.concatenate([daysS_k, daysL_k, daysM_k, [1]])
-            mask.append(mask_k)
-        mask = np.stack(mask)
+        matS1 = x[:, indSel, :][:, :, iS]
+        matL1 = x[:, indSel, :][:, :, iL]
+        matM1 = x[:, indSel, :][:, :, iM]
+        xS = np.swapaxes(matS1, 0, 1)
+        xL = np.swapaxes(matL1, 0, 1)
+        xM = np.swapaxes(matM1, 0, 1)
+
+        maskS1 = ~np.isnan(xS[:, :, 0])
+        maskL1 = ~np.isnan(xL[:, :, 0])
+        maskM1 = ~np.isnan(xM[:, :, 0])
+        xS[np.isnan(xS)] = 0
+        xL[np.isnan(xL)] = 0
+        xM[np.isnan(xM)] = 0
+
+        mask = np.concatenate((maskS1, maskL1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
         
         return (
             torch.tensor(xS, dtype=torch.float32),
             torch.tensor(xL, dtype=torch.float32),
             torch.tensor(xM, dtype=torch.float32),
-            None,
-            None,
-            None,
-            # torch.tensor(pS, dtype=torch.float32),
-            # torch.tensor(pL, dtype=torch.float32),
-            # torch.tensor(pM, dtype=torch.float32),
             torch.tensor(xc[indSel, :], dtype=torch.float32),
             torch.tensor(yc[indSel, 0], dtype=torch.float32),
             torch.tensor(mask, dtype=torch.int)
@@ -215,6 +190,7 @@ def train(args, saveFolder):
         # varM = ["mod_b{}".format(x) for x in range(1, 8)]
         varM = ["myd_b{}".format(x) for x in range(1, 8)]
         # varM = ['Fpar', 'Lai']
+        # varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
         iS = [df.varX.index(var) for var in varS]
         iL = [df.varX.index(var) for var in varL]
         iM = [df.varX.index(var) for var in varM]
@@ -222,32 +198,42 @@ def train(args, saveFolder):
         
         for k, ind in enumerate(testInd):
             k
-            xS = x[pSLst[ind], ind, :][:, iS][None, ...]
-            xL = x[pLLst[ind], ind, :][:, iL][None, ...]
-            xM = x[pMLst[ind], ind, :][:, iM][None, ...]
-            pS = (pSLst[ind][None, ...] - rho) / rho
-            pL = (pLLst[ind][None, ...] - rho) / rho
-            pM = (pMLst[ind][None, ...] - rho) / rho
+            matS1 = x[:, ind, :][:, iS]
+            matL1 = x[:, ind, :][:, iL]
+            matM1 = x[:, ind, :][:, iM]
+            xS = matS1[None, ...]
+            xL = matL1[None, ...]
+            xM = matM1[None, ...]
+            # xS = np.swapaxes(matS1, 0, 1)
+            # xL = np.swapaxes(matL1, 0, 1)
+            # xM = np.swapaxes(matM1, 0, 1)
+    
+            maskS1 = ~np.isnan(xS[:, :, 0])
+            maskL1 = ~np.isnan(xL[:, :, 0])
+            maskM1 = ~np.isnan(xM[:, :, 0])
+            xS[np.isnan(xS)] = 0
+            xL[np.isnan(xL)] = 0
+            xM[np.isnan(xM)] = 0
+            mask = np.concatenate((maskS1, maskL1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+       
             xcT = xc[ind][None, ...]
             xS = torch.from_numpy(xS).float()
             xL = torch.from_numpy(xL).float()
             xM = torch.from_numpy(xM).float()
-            pS = torch.from_numpy(pS).float()
-            pL = torch.from_numpy(pL).float()
-            pM = torch.from_numpy(pM).float()
             xcT = torch.from_numpy(xcT).float()
+            mask = torch.from_numpy(mask).int()
 
             xTup, pTup, lTup = (), (), ()
             if satellites == "no_landsat":
                 xTup = (xS, xM)
-                pTup = (pS, pM)
+                # pTup = (pS, pM)
                 lTup = (xS.shape[1], xM.shape[1])
             else:
                 xTup = (xS, xL, xM)
-                pTup = (pS, pL, pM)
+                # pTup = (pS, pL, pM)
                 lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
-            
-            yP = model(xTup, pTup, xcT, lTup)
+
+            yP = model(xTup, xcT, lTup, mask)
             
             yOut[k] = yP.detach().numpy()
         
@@ -337,6 +323,7 @@ def train(args, saveFolder):
         # varM = ["mod_b{}".format(x) for x in range(1, 8)]
         varM = ["myd_b{}".format(x) for x in range(1, 8)]
         # varM = ['Fpar', 'Lai']
+        # varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
         iS = [df.varX.index(var) for var in varS]
         iL = [df.varX.index(var) for var in varL]
         iM = [df.varX.index(var) for var in varM]
@@ -362,14 +349,14 @@ def train(args, saveFolder):
             xTup, pTup, lTup = (), (), ()
             if satellites == "no_landsat":
                 xTup = (xS, xM)
-                pTup = (pS, pM)
+                # pTup = (pS, pM)
                 lTup = (xS.shape[1], xM.shape[1])
             else:
                 xTup = (xS, xL, xM)
-                pTup = (pS, pL, pM)
+                # pTup = (pS, pL, pM)
                 lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
             
-            yP = model(xTup, pTup, xcT, lTup)
+            yP = model(xTup, xcT, lTup, mask)
             yOut[k] = yP.detach().numpy()
         
         yT = yc[testInd, 0]
@@ -498,7 +485,7 @@ def train(args, saveFolder):
         wandb.init(dir=os.path.join(kPath.dirVeg))
         wandb.run.name = run_name
         
-    dataName = 'singleDaily'
+    dataName = args.dataset
     importlib.reload(hydroDL.data.dbVeg)
     df = dbVeg.DataFrameVeg(dataName)
     dm = DataModel(X=df.x, XC=df.xc, Y=df.y)
@@ -511,8 +498,8 @@ def train(args, saveFolder):
     iInd = np.array(iInd)
     jInd = np.array(jInd)
     
-    np.nanmean(dm.x[:, :, 0])
-    np.nanmax(df.x[:, :, 2])
+    # np.nanmean(dm.x[:, :, 0])
+    # np.nanmax(df.x[:, :, 2])
     
     # calculate position
     varS = ['VV', 'VH', 'vh_vv']
@@ -520,6 +507,8 @@ def train(args, saveFolder):
     # varM = ["mod_b{}".format(x) for x in range(1, 8)]
     varM = ["myd_b{}".format(x) for x in range(1, 8)]
     # varM = ['Fpar', 'Lai']
+    # varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
+
     iS = [df.varX.index(var) for var in varS]
     iL = [df.varX.index(var) for var in varL]
     iM = [df.varX.index(var) for var in varM]
@@ -575,7 +564,7 @@ def train(args, saveFolder):
     bL = 6
     bM = 10
 
-    xS, xL, xM, pS, pL, pM, xcT, yT, mask = randomSubset(opt='train', batch=batch_size, sample=args.sample)
+    xS, xL, xM, xcT, yT, mask = randomSubset(opt='train', batch=batch_size)
 
     nTup, lTup = (), ()
     if satellites == "no_landsat":
@@ -606,22 +595,21 @@ def train(args, saveFolder):
         lossEp = 0
         metrics = {"train_loss" : 0, "train_RMSE" : 0, "train_rsq" : 0, "train_Rsq" : 0}
         for i in range(nIterEp):
-            print(i)
+            print(f"epoch {ep}, iter {i}")  
             t0 = time.time()
-            xS, xL, xM, pS, pL, pM, xcT, yT, mask = randomSubset(opt='train', batch=batch_size, sample=args.sample)
-            # print(xS.shape, xL.shape, xM.shape, pS.shape, pL.shape, pM.shape, xcT.shape, yT.shape)
+            xS, xL, xM, xcT, yT, mask = randomSubset(opt='train', batch=batch_size)
             t1 = time.time()
             model.zero_grad()
 
             xTup, pTup = (), ()
             if satellites == "no_landsat":
                 xTup = (xS, xM)
-                pTup = (pS, pM)
+                # pTup = (pS, pM)
             else:
                 xTup = (xS, xL, xM)
-                pTup = (pS, pL, pM)
-            
-            yP = model(xTup, pTup, xcT, lTup, mask)      
+                # pTup = (pS, pL, pM)
+
+            yP = model(xTup, xcT, lTup, mask)      
             loss = loss_fn(yP, yT)
             loss.backward()
             t2 = time.time()
@@ -641,17 +629,17 @@ def train(args, saveFolder):
         metrics = {metric : sum / nIterEp for metric, sum in metrics.items()}
         
         optimizer.zero_grad()
-        xS, xL, xM, pS, pL, pM, xcT, yT, mask = randomSubset(opt='test', batch=1000, sample=args.sample)
+        xS, xL, xM, xcT, yT, mask = randomSubset(opt='test', batch=1000)
 
         xTup, pTup = (), ()
         if satellites == "no_landsat":
             xTup = (xS, xM)
-            pTup = (pS, pM)
+            # pTup = (pS, pM)
         else:
             xTup = (xS, xL, xM)
-            pTup = (pS, pL, pM)
+            # pTup = (pS, pL, pM)
         
-        yP = model(xTup, pTup, xcT, lTup)
+        yP = model(xTup, xcT, lTup, mask)
         loss = loss_fn(yP, yT)
     
         metrics["test_loss"] = loss_fn(yP, yT).item()
@@ -673,6 +661,7 @@ def train(args, saveFolder):
         )
 
         if ep > 0 and ep % test_epoch == 0:
+            print("testing on full test set")
             test(df, testInd, testIndBelow, ep, metrics)
 
         if not args.testing:
@@ -709,7 +698,7 @@ if __name__ == "__main__":
     parser.add_argument("--weights_path", type=str, default="")
     parser.add_argument("--device", type=int, default=-1)
     # dataset 
-    parser.add_argument("--dataset", type=str)
+    parser.add_argument("--dataset", type=str, default="singleDaily", choices=["singleDaily", "singleDaily-modisgrid", "singleDaily-nadgrid"])
     parser.add_argument("--rho", type=int, default=45)
     parser.add_argument("--satellites", type=str, default="all")
     # model

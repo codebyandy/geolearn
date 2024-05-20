@@ -516,8 +516,6 @@ def train(args, saveFolder):
         pLLst.append(pL)
         pMLst.append(pM)
         nMat[k, :] = [len(pS), len(pL), len(pM)]
-
-    pdb.set_trace()
     
     np.where(nMat == 0)
     np.sum((np.where(nMat == 0)[1]) == 0)
