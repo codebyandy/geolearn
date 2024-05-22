@@ -59,7 +59,7 @@ def submitJobGPU(jobName, cmdLine, nH=8, nM=16):
 # submitJob(run_name, cmd_line)
     
 dropout_lst = [0.2, 0.4, 0.6]
-nh_lst = [24, 32]
+nh_lst = [64, 128, 256]
 
 for dropout in dropout_lst:
     for nh in nh_lst:
