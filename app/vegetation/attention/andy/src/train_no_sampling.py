@@ -174,7 +174,6 @@ def train(args, saveFolder):
         else: 
             mask = np.concatenate((maskS1, maskL1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
         
-        print(mask.shape)
         return (
             torch.tensor(xS, dtype=torch.float32),
             torch.tensor(xL, dtype=torch.float32),
@@ -186,7 +185,7 @@ def train(args, saveFolder):
     
 
 
-    def test(df, testInd, testIndBelow, ep, satellites):
+    def test(df, testInd, testIndBelow, ep, satellites, metrics):
         # test
         model.eval()
         varS = ['VV', 'VH', 'vh_vv']
@@ -214,7 +213,10 @@ def train(args, saveFolder):
             xS[np.isnan(xS)] = 0
             xL[np.isnan(xL)] = 0
             xM[np.isnan(xM)] = 0
-            mask = np.concatenate((maskS1, maskL1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+            if satellites == 'no_landsat':
+                mask = np.concatenate((maskS1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+            else: 
+                mask = np.concatenate((maskS1, maskL1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
        
             xcT = xc[ind][None, ...]
             xS = torch.from_numpy(xS).float()
@@ -349,7 +351,10 @@ def train(args, saveFolder):
             xS[np.isnan(xS)] = 0
             xL[np.isnan(xL)] = 0
             xM[np.isnan(xM)] = 0
-            mask = np.concatenate((maskS1, maskL1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+            if satellites == 'no_landsat':
+                mask = np.concatenate((maskS1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+            else: 
+                mask = np.concatenate((maskS1, maskL1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
        
             xcT = xc[ind][None, ...]
             xS = torch.from_numpy(xS).float()
@@ -673,7 +678,7 @@ def train(args, saveFolder):
 
         if ep > 0 and ep % test_epoch == 0:
             print("testing on full test set")
-            test(df, testInd, testIndBelow, ep, args.satellites)
+            test(df, testInd, testIndBelow, ep, args.satellites, metrics)
 
         if not args.testing:
             wandb.log(metrics)
