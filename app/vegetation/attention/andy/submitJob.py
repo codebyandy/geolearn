@@ -52,21 +52,21 @@ def submitJobGPU(jobName, cmdLine, nH=8, nM=16):
 
     
 dropout_lst = [0.2, 0.4, 0.6]
-# nh_lst = [64, 128,
+nh_lst = [64, 128, 256]
 
-# for dropout in dropout_lst:
-#     for nh in nh_lst:
-#         run_name = f'no_sampling_do_{dropout}_nh_{nh}'
-#         train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/train.py'
-#         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh} --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat'
-#         submitJob(run_name, cmd_line)
+for dropout in dropout_lst:
+    for nh in nh_lst:
+        run_name = f'cherry_pick_do_{dropout}_nh_{nh}'
+        train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/train.py'
+        cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh} --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat'
+        submitJob(run_name, cmd_line)
 
 
 nh_lst = [24, 32, 64, 128, 256]
 
 for dropout in dropout_lst:
     for nh in nh_lst:
-        run_name = f'no_sampling_do_{dropout}_nh_{nh}'
+        run_name = f'all_pick_do_{dropout}_nh_{nh}'
         train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/train_no_sampling.py'
         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh} --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat --test_epoch 10'
         submitJob(run_name, cmd_line, nH=24)
