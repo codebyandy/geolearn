@@ -1,31 +1,28 @@
+
 import hydroDL.data.dbVeg
 from hydroDL.data import dbVeg
 import importlib
 import numpy as np
 import json
 import os
-from hydroDL import utils
-from hydroDL.post import mapplot, axplot, figplot
 import matplotlib.pyplot as plt
-from hydroDL.model import rnn, crit, trainBasin
-import math
 import torch
 from torch import nn
 from hydroDL.data import DataModel
-from hydroDL.master import basinFull, slurm, dataTs2Range
+from hydroDL.master import  dataTs2Range
 import torch.optim as optim
 from hydroDL import kPath
 import torch.optim.lr_scheduler as lr_scheduler
-import dill
-
-from tqdm import tqdm
-import pdb
 from sklearn.metrics import r2_score
 import wandb
 import time
 import pandas as pd
 import argparse
 import shutil
+
+from torch import nn
+import torch
+import math
 
 
 class InputFeature(nn.Module):
@@ -140,7 +137,7 @@ class FinalModel(nn.Module):
 
 
 def train(args, saveFolder):
-    def randomSubset(opt='train', batch=1000):
+    def randomSubset(satellites, opt='train', batch=1000):
         # random sample within window
         varS = ['VV', 'VH', 'vh_vv']
         varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
@@ -172,8 +169,12 @@ def train(args, saveFolder):
         xL[np.isnan(xL)] = 0
         xM[np.isnan(xM)] = 0
 
-        mask = np.concatenate((maskS1, maskL1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+        if satellites == 'no_landsat':
+            mask = np.concatenate((maskS1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+        else: 
+            mask = np.concatenate((maskS1, maskL1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
         
+        print(mask.shape)
         return (
             torch.tensor(xS, dtype=torch.float32),
             torch.tensor(xL, dtype=torch.float32),
@@ -185,7 +186,7 @@ def train(args, saveFolder):
     
 
 
-    def test(df, testInd, testIndBelow, ep, metric):
+    def test(df, testInd, testIndBelow, ep, satellites):
         # test
         model.eval()
         varS = ['VV', 'VH', 'vh_vv']
@@ -207,10 +208,6 @@ def train(args, saveFolder):
             xS = matS1[None, ...]
             xL = matL1[None, ...]
             xM = matM1[None, ...]
-            # xS = np.swapaxes(matS1, 0, 1)
-            # xL = np.swapaxes(matL1, 0, 1)
-            # xM = np.swapaxes(matM1, 0, 1)
-    
             maskS1 = ~np.isnan(xS[:, :, 0])
             maskL1 = ~np.isnan(xL[:, :, 0])
             maskM1 = ~np.isnan(xM[:, :, 0])
@@ -579,7 +576,7 @@ def train(args, saveFolder):
     bL = 6
     bM = 10
 
-    xS, xL, xM, xcT, yT, mask = randomSubset(opt='train', batch=batch_size)
+    xS, xL, xM, xcT, yT, mask = randomSubset(args.satellites, opt='train', batch=batch_size)
 
     nTup, lTup = (), ()
     if satellites == "no_landsat":
@@ -609,10 +606,9 @@ def train(args, saveFolder):
     for ep in range(epochs):
         lossEp = 0
         metrics = {"train_loss" : 0, "train_RMSE" : 0, "train_rsq" : 0, "train_Rsq" : 0}
-        for i in range(nIterEp):
-            print(f"epoch {ep}, iter {i}")  
+        for i in range(nIterEp): 
             t0 = time.time()
-            xS, xL, xM, xcT, yT, mask = randomSubset(opt='train', batch=batch_size)
+            xS, xL, xM, xcT, yT, mask = randomSubset(args.satellites, opt='train', batch=batch_size)
             t1 = time.time()
             model.zero_grad()
 
@@ -644,7 +640,7 @@ def train(args, saveFolder):
         metrics = {metric : sum / nIterEp for metric, sum in metrics.items()}
         
         optimizer.zero_grad()
-        xS, xL, xM, xcT, yT, mask = randomSubset(opt='test', batch=1000)
+        xS, xL, xM, xcT, yT, mask = randomSubset(args.satellites, opt='test', batch=1000)
 
         xTup, pTup = (), ()
         if satellites == "no_landsat":
@@ -677,12 +673,10 @@ def train(args, saveFolder):
 
         if ep > 0 and ep % test_epoch == 0:
             print("testing on full test set")
-            test(df, testInd, testIndBelow, ep, metrics)
+            test(df, testInd, testIndBelow, ep, args.satellites)
 
         if not args.testing:
             wandb.log(metrics)
-        
-    # test(df, testInd, testIndBelow, ep, metrics)
 
     metrics_path = os.path.join(saveFolder, 'metrics.csv')
     metrics = pd.read_csv(metrics_path)
@@ -713,7 +707,7 @@ if __name__ == "__main__":
     parser.add_argument("--weights_path", type=str, default="")
     parser.add_argument("--device", type=int, default=-1)
     # dataset 
-    parser.add_argument("--dataset", type=str, default="singleDaily", choices=["singleDaily", "singleDaily-modisgrid", "singleDaily-nadgrid"])
+    parser.add_argument("--dataset", type=str, default="singleDaily-nadgrid", choices=["singleDaily", "singleDaily-modisgrid", "singleDaily-nadgrid"])
     parser.add_argument("--rho", type=int, default=45)
     parser.add_argument("--satellites", type=str, default="all")
     # model
