@@ -1,31 +1,32 @@
+
 import hydroDL.data.dbVeg
 from hydroDL.data import dbVeg
 import importlib
 import numpy as np
 import json
 import os
-from hydroDL import utils
-from hydroDL.post import mapplot, axplot, figplot
 import matplotlib.pyplot as plt
-from hydroDL.model import rnn, crit, trainBasin
-import math
 import torch
 from torch import nn
 from hydroDL.data import DataModel
-from hydroDL.master import basinFull, slurm, dataTs2Range
+from hydroDL.master import  dataTs2Range
 import torch.optim as optim
 from hydroDL import kPath
 import torch.optim.lr_scheduler as lr_scheduler
-import dill
-
-from tqdm import tqdm
-import pdb
 from sklearn.metrics import r2_score
 import wandb
 import time
 import pandas as pd
 import argparse
 import shutil
+
+
+
+
+from torch import nn
+import torch
+import math
+
 
 
 class InputFeature(nn.Module):
@@ -566,8 +567,6 @@ def train(args, saveFolder):
     
     nxc = xc.shape[-1]
     model = FinalModel(nTup, nxc, nh)
-    # yP = model(xTup, pTup, xcT, lTup)
-    
     loss_fn = nn.L1Loss(reduction='mean')
 
     if optimizer == "adam":
@@ -653,8 +652,6 @@ def train(args, saveFolder):
 
         if not args.testing:
             wandb.log(metrics)
-        
-    # test(df, testInd, testIndBelow, ep, metrics)
 
     metrics_path = os.path.join(saveFolder, 'metrics.csv')
     metrics = pd.read_csv(metrics_path)
@@ -685,7 +682,8 @@ if __name__ == "__main__":
     parser.add_argument("--weights_path", type=str, default="")
     parser.add_argument("--device", type=int, default=-1)
     # dataset 
-    parser.add_argument("--dataset", type=str, default="singleDaily", choices=["singleDaily", "singleDaily-modisgrid", "singleDaily-nadgrid"])
+    parser.add_argument("--dataset", type=str, default="singleDaily",
+                        choices=["singleDaily", "singleDaily-modisgrid", "singleDaily-nadgrid"])
     parser.add_argument("--rho", type=int, default=45)
     parser.add_argument("--satellites", type=str, default="all")
     # model

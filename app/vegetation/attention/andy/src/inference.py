@@ -1,285 +1,553 @@
 
-from hydroDL import kPath
+import hydroDL.data.dbVeg
 from hydroDL.data import dbVeg
-from hydroDL.data import DataModel
-from hydroDL.master import basinFull, slurm, dataTs2Range
-from hydroDL.post import mapplot, axplot, figplot
-
-from model import FinalModel
-import data
-
-import torch
+import importlib
 import numpy as np
-
-from matplotlib import pyplot as plt
-import matplotlib.gridspec as gridspec
-import pandas as pd
-from sklearn.metrics import r2_score 
+import json
 import os
-import pickle
-import pdb
+import matplotlib.pyplot as plt
+import torch
+from torch import nn
+from hydroDL.data import DataModel
+from hydroDL.master import  dataTs2Range
+import torch.optim as optim
+from hydroDL import kPath
+import torch.optim.lr_scheduler as lr_scheduler
+from sklearn.metrics import r2_score
+import wandb
+import time
+import pandas as pd
+import argparse
+import shutil
 
 
 
-def plot(obs, pred, ax):
-    # fig, ax = plt.subplots(1, 1)
-    ax.plot(pred, obs, '*')
-    xlim = ax.get_xlim()
-    ylim = ax.get_ylim()
-    vmin = np.min([xlim[0], ylim[0]])
-    vmax = np.max([xlim[1], ylim[1]])
-    _ = ax.plot([vmin, vmax], [vmin, vmax], 'r-')
-    return ax
-    # return fig
+
+from torch import nn
+import torch
+import math
 
 
-def calc_metrics(obs, pred):
-    RMSE = np.sqrt(np.mean((obs - pred) ** 2))
-    rsq = np.corrcoef(pred, obs)[0][1] ** 2
-    Rsq = r2_score(obs, pred)
-    return RMSE, rsq, Rsq
+
+class InputFeature(nn.Module):
+    def __init__(self, nTup, nxc, nh):
+        super().__init__()
+        self.nh = nh
+        self.lnXc = nn.Sequential(nn.Linear(nxc, nh), nn.ReLU(), nn.Linear(nh, nh))
+        self.lnLst = nn.ModuleList()
+        for n in nTup:
+            self.lnLst.append(
+                nn.Sequential(nn.Linear(n, nh), nn.ReLU(), nn.Linear(nh, nh))
+            )
+
+    def getPos(self, pos):
+        nh = self.nh
+        P = torch.zeros([pos.shape[0], pos.shape[1], nh], dtype=torch.float32)
+        for i in range(int(nh / 2)):
+            P[:, :, 2 * i] = torch.sin(pos / (i + 1) * torch.pi)
+            P[:, :, 2 * i + 1] = torch.cos(pos / (i + 1) * torch.pi)
+        return P
+
+    def forward(self, xTup, pTup, xc):
+        outLst = list()
+        for k in range(len(xTup)):
+            x = self.lnLst[k](xTup[k]) + self.getPos(pTup[k])
+            outLst.append(x)
+        outC = self.lnXc(xc)
+        out = torch.cat(outLst + [outC[:, None, :]], dim=1)
+        return out
 
 
-def analysis(dict, rho=45, nh=32):
-    with open(os.path.join(kPath.dirVeg, 'stratified_3_fold.pkl'), 'rb') as f:
-        data_tuple = pickle.load(f)
-    # with open(os.path.join(kPath.dirVeg, 'data_folds.pkl'), 'rb') as f:
-    #     data_tuple = pickle.load(f)[0]
+class AttentionLayer(nn.Module):
+    def __init__(self, nx, nh):
+        super().__init__()
+        self.nh = nh
+        self.W_k = nn.Linear(nx, nh, bias=False)
+        self.W_q = nn.Linear(nx, nh, bias=False)
+        self.W_v = nn.Linear(nx, nh, bias=False)
+        self.W_o = nn.Linear(nh, nh, bias=False)
+
+    def forward(self, x):
+        # pdb.set_trace()
+        q, k, v = self.W_q(x), self.W_k(x), self.W_v(x)
+        d = q.shape[1]
+        score = torch.bmm(q, k.transpose(1, 2)) / math.sqrt(d)
+        attention_mask = torch.ones(score.shape)
+        attention = torch.softmax(score * attention_mask, dim=-1)
+        out = torch.bmm(attention, v)
+        out = self.W_o(out)
+        return out
+
+
+class PositionWiseFFN(nn.Module):
+    def __init__(self, nh, ny):
+        super().__init__()
+        self.dense1 = nn.Linear(nh, nh)
+        self.relu = nn.ReLU()
+        self.dense2 = nn.Linear(nh, ny)
+
+    def forward(self, X):
+        return self.dense2(self.relu(self.dense1(X)))
+
+
+class AddNorm(nn.Module):
+    def __init__(self, norm_shape, dropout):
+        super().__init__()
+        self.dropout = nn.Dropout(dropout)
+        self.ln = nn.LayerNorm(norm_shape)
+
+    def forward(self, X, Y):
+        return self.ln(self.dropout(Y) + X)
+
+
+class FinalModel(nn.Module):
+    def __init__(self, nTup, nxc, nh):
+        super().__init__()
+        self.nTup = nTup
+        self.nxc = nxc
+        self.encoder = InputFeature(nTup, nxc, nh)
+        self.atten = AttentionLayer(nh, nh)
+        self.addnorm1 = AddNorm(nh, DROPOUT)
+        self.addnorm2 = AddNorm(nh, DROPOUT)
+        self.ffn1 = PositionWiseFFN(nh, nh)
+        self.ffn2 = PositionWiseFFN(nh, 1)
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+
+    def forward(self, x, pos, xcT, lTup):
+        xIn = self.encoder(x, pos, xcT)
+        out = self.atten(xIn)
+        out = self.addnorm1(xIn, out)
+        out = self.ffn1(out)
+        out = self.addnorm2(xIn, out)
+        out = self.ffn2(out)
+        out = out.squeeze(-1)
+        k = 0
+        temp = 0
+        for i in lTup:
+            temp = temp + out[:, k : i + k].mean(-1)
+            k = k + i
+        temp = temp + out[:, k:].mean(-1)
+        return temp
+
+
+
+def train(args, saveFolder):
+    def test(df, testInd, testIndBelow, ep, metric):
+        # test
+        model.eval()
+        varS = ['VV', 'VH', 'vh_vv']
+        varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
+        # varM = ["mod_b{}".format(x) for x in range(1, 8)]
+        # varM = ["myd_b{}".format(x) for x in range(1, 8)]
+        # varM = ['Fpar', 'Lai']
+        varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
+        iS = [df.varX.index(var) for var in varS]
+        iL = [df.varX.index(var) for var in varL]
+        iM = [df.varX.index(var) for var in varM]
+        yOut = np.zeros(len(testInd))
         
-    metrics_data = ["RMSE", "rsq", "Rsq", 
-            "site-mean RMSE", "site-mean rsq", "site-mean Rsq",
-            "anomaly RMSE", "anomaly rsq", "anomaly Rsq"]
-    metrics_data = {name : [] for name in metrics_data}
-    final_fig, axes = plt.subplots(nrows=len(dict), ncols=3, figsize=(15, 3 * len(dict))) 
+        for k, ind in enumerate(testInd):
+            k
+            xS = x[pSLst[ind], ind, :][:, iS][None, ...]
+            xL = x[pLLst[ind], ind, :][:, iL][None, ...]
+            xM = x[pMLst[ind], ind, :][:, iM][None, ...]
+            pS = (pSLst[ind][None, ...] - rho) / rho
+            pL = (pLLst[ind][None, ...] - rho) / rho
+            pM = (pMLst[ind][None, ...] - rho) / rho
+            xcT = xc[ind][None, ...]
+            xS = torch.from_numpy(xS).float()
+            xL = torch.from_numpy(xL).float()
+            xM = torch.from_numpy(xM).float()
+            pS = torch.from_numpy(pS).float()
+            pL = torch.from_numpy(pL).float()
+            pM = torch.from_numpy(pM).float()
+            xcT = torch.from_numpy(xcT).float()
+
+            xTup, pTup, lTup = (), (), ()
+            if satellites == "no_landsat":
+                xTup = (xS, xM)
+                pTup = (pS, pM)
+                lTup = (xS.shape[1], xM.shape[1])
+            else:
+                xTup = (xS, xL, xM)
+                pTup = (pS, pL, pM)
+                lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
+            
+            yP = model(xTup, pTup, xcT, lTup)
+            
+            yOut[k] = yP.detach().numpy()
+        
+        yT = yc[testInd, 0]    
+        
+        obs = dm.transOutY(yT[:, None])[:, 0]
+        pred = dm.transOutY(yOut[:, None])[:, 0]
+        
+        print("ABOVE THRESH")
+        
+        rmse = np.sqrt(np.mean((obs - pred) ** 2))
+        corrcoef = np.corrcoef(obs, pred)[0, 1]
+        coef_det = r2_score(obs, pred)
+        obs_quality = [rmse, corrcoef, coef_det]
+        
+        print("All obs")
+        print("rmse", rmse)
+        print("corrcoef", corrcoef)
+        print("coef det", coef_det)
+        print("")
+        
+        # to site
+        tempS = jInd[testInd]
+        tempT = iInd[testInd]
+        testSite = np.unique(tempS)
+        siteLst = list()
+        matResult = np.ndarray([len(testSite), 3])
+        for i, k in enumerate(testSite):
+            ind = np.where(tempS == k)[0]
+            t = df.t[tempT[ind]]
+            siteName = df.siteIdLst[k]
+            siteLst.append([pred[ind], obs[ind], t])
+            matResult[i, 0] = np.mean(pred[ind])
+            matResult[i, 1] = np.mean(obs[ind])
+            matResult[i, 2] = np.corrcoef(pred[ind], obs[ind])[0, 1]
+        
+        # mean   
+        rmse = np.sqrt(np.mean((matResult[:, 0] - matResult[:, 1]) ** 2))
+        corrcoef = np.corrcoef(matResult[:, 0], matResult[:, 1])[0, 1]
+        coef_det = r2_score(matResult[:, 0], matResult[:, 1])
+        site_quality = [rmse, corrcoef, coef_det]
+        
+        # rmse
+        print("Obs mean per site")
+        print("rmse",rmse)
+        print("corrcoef", corrcoef)
+        print("coef det", coef_det)
+        print("")
+        
+        # anomoly
+        fig, ax = plt.subplots(1, 1)
+        aLst, bLst = list(), list()
+        
+        for site in siteLst:
+            aLst.append(site[0] - np.mean(site[0]))
+            bLst.append(site[1] - np.mean(site[1]))
+        
+        a, b = np.concatenate(aLst), np.concatenate(bLst)
+        ax.plot(np.concatenate(aLst), np.concatenate(bLst), '.')
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        vmin = np.min([xlim[0], ylim[0]])
+        vmax = np.max([xlim[1], ylim[1]])
+        _ = ax.plot([vmin, vmax], [vmin, vmax], 'r-')
+        ax.set_title("Obs diff from site means (Quality sites)")
+        fig.show()
+        
+        # rmse
+        print("Obs diff from site means")
+        rmse = np.sqrt(np.mean((a - b) ** 2))
+        corrcoef = np.corrcoef(a,b)[0, 1]
+        coef_det = r2_score(a, b)
+        anomaly_quality = [rmse, corrcoef, coef_det]
+        
+        print("rmse", rmse)
+        print("corrcoef", corrcoef)
+        print("coef det", coef_det)
+        print("")
+        
+        ### Below THRESHOLD ###
+        testInd = testIndBelow
+        
+        # test
+        model.eval()
+        varS = ['VV', 'VH', 'vh_vv']
+        varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
+        # varM = ["mod_b{}".format(x) for x in range(1, 8)]
+        # varM = ["myd_b{}".format(x) for x in range(1, 8)]
+        # varM = ['Fpar', 'Lai']
+        varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
+        iS = [df.varX.index(var) for var in varS]
+        iL = [df.varX.index(var) for var in varL]
+        iM = [df.varX.index(var) for var in varM]
+        yOut = np.zeros(len(testInd))
+        
+        for k, ind in enumerate(testInd):
+            k
+            xS = x[pSLst[ind], ind, :][:, iS][None, ...]
+            xL = x[pLLst[ind], ind, :][:, iL][None, ...]
+            xM = x[pMLst[ind], ind, :][:, iM][None, ...]
+            pS = (pSLst[ind][None, ...] - rho) / rho
+            pL = (pLLst[ind][None, ...] - rho) / rho
+            pM = (pMLst[ind][None, ...] - rho) / rho
+            xcT = xc[ind][None, ...]
+            xS = torch.from_numpy(xS).float()
+            xL = torch.from_numpy(xL).float()
+            xM = torch.from_numpy(xM).float()
+            pS = torch.from_numpy(pS).float()
+            pL = torch.from_numpy(pL).float()
+            pM = torch.from_numpy(pM).float()
+            xcT = torch.from_numpy(xcT).float()
+
+            xTup, pTup, lTup = (), (), ()
+            if satellites == "no_landsat":
+                xTup = (xS, xM)
+                pTup = (pS, pM)
+                lTup = (xS.shape[1], xM.shape[1])
+            else:
+                xTup = (xS, xL, xM)
+                pTup = (pS, pL, pM)
+                lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
+            
+            yP = model(xTup, pTup, xcT, lTup)
+            yOut[k] = yP.detach().numpy()
+        
+        yT = yc[testInd, 0]
+        
+        obs = dm.transOutY(yT[:, None])[:, 0]
+        pred = dm.transOutY(yOut[:, None])[:, 0]
+        
+        print("BELOW THRESH")
+        
+        rmse = np.sqrt(np.mean((obs - pred) ** 2))
+        corrcoef = np.corrcoef(obs, pred)[0, 1]
+        coef_det = r2_score(obs, pred)
+        obs_poor = [rmse, corrcoef, coef_det]
+        
+        print("All obs")
+        print("rmse", rmse)
+        print("corrcoef", corrcoef)
+        print("coef det", coef_det)
+        print("")
+        
+        
+        # to site
+        tempS = jInd[testInd]
+        tempT = iInd[testInd]
+        testSite = np.unique(tempS)
+        siteLst = list()
+        matResult = np.ndarray([len(testSite), 3])
+        for i, k in enumerate(testSite):
+            ind = np.where(tempS == k)[0]
+            t = df.t[tempT[ind]]
+            siteName = df.siteIdLst[k]
+            siteLst.append([pred[ind], obs[ind], t])
+            matResult[i, 0] = np.mean(pred[ind])
+            matResult[i, 1] = np.mean(obs[ind])
+            matResult[i, 2] = np.corrcoef(pred[ind], obs[ind])[0, 1]
+        
+        # mean
+        rmse = np.sqrt(np.mean((matResult[:, 0] - matResult[:, 1]) ** 2))
+        corrcoef = np.corrcoef(matResult[:, 0], matResult[:, 1])[0, 1]
+        coef_det = r2_score(matResult[:, 0], matResult[:, 1])
+        site_poor = [rmse, corrcoef, coef_det]
+        
+        # rmse
+        print("Obs mean per site")
+        print("rmse", rmse)
+        print("corrcoef", corrcoef)
+        print("coef det", coef_det)
+        print("")
+        
+        # anomoly
+        fig, ax = plt.subplots(1, 1)
+        aLst, bLst = list(), list()
+        
+        for site in siteLst:
+            aLst.append(site[0] - np.mean(site[0]))
+            bLst.append(site[1] - np.mean(site[1]))
+        
+        a, b = np.concatenate(aLst), np.concatenate(bLst)
+        
+        # rmse
+        print("Obs diff from site means")
+        rmse = np.sqrt(np.mean((a - b) ** 2))
+        corrcoef = np.corrcoef(a,b)[0, 1]
+        coef_det = r2_score(a, b)
+        anomaly_poor = [rmse, corrcoef, coef_det]
+        
+        print("rmse", rmse)
+        print("corrcoef", corrcoef)
+        print("coef det", coef_det)
+        print("")
+        
+        data = {
+            "epoch": [ep],
+            "qual_obs_rmse": [obs_quality[0]],
+            "qual_obs_corrcoef": [obs_quality[1]],
+            "qual_obs_coefdet": [obs_quality[2]],
+            "qual_site_rmse": [site_quality[0]],
+            "qual_site_corrcoef": [site_quality[1]],
+            "qual_site_coefdet": [site_quality[2]],
+            "qual_anomaly_rmse": [anomaly_quality[0]],
+            "qual_anomaly_corrcoef": [anomaly_quality[1]],
+            "qual_anomaly_coefdet": [anomaly_quality[2]],
+            "poor_obs_rmse": [obs_poor[0]],
+            "poor_obs_corrcoef": [obs_poor[1]],
+            "poor_obs_coefdet": [obs_poor[2]], 
+            "poor_site_rmse": [site_poor[0]],
+            "poor_site_corrcoef": [site_poor[1]],
+            "poor_site_coefdet": [site_poor[2]],
+            "poor_anomaly_rmse": [anomaly_poor[0]],
+            "poor_anomaly_corrcoef": [anomaly_poor[1]],
+            "poor_anomaly_coefdet": [anomaly_poor[2]]
+        }
+        
+        full_test_metrics = {(k, v[0]) for (k, v) in data.items()}
+        metrics.update(full_test_metrics)
+        
+        new_metrics = pd.DataFrame(data)
+        metrics_path = os.path.join(saveFolder, 'metrics.csv')
+        if os.path.exists(metrics_path):
+            prev_metrics = pd.read_csv(metrics_path)
+            new_metrics = pd.concat([prev_metrics, new_metrics])
+            
+        new_metrics.to_csv(os.path.join(saveFolder, 'metrics.csv'), index=False)
+        torch.save(model.state_dict(), os.path.join(saveFolder, f'model_ep{ep}.pth'))
+
     
-    for i, (run, (path, epoch)) in enumerate(dict.items()):
-        # load model
-        nTup, nxc, lTup = data.get_shapes(data_tuple, rho, "")  
-        model = FinalModel(nTup, nxc, nh, "default")
-        model_weights = os.path.join(kPath.dirVeg, "runs", path)
-        model.load_state_dict(torch.load(model_weights))
-
-        # inference
-        _, (metrics, site_metrics, outlier_metrics) = inference(model, data_tuple, rho, "", axes[i])
-
-        # metrics
-        metrics_data["RMSE"].append(metrics[0])
-        metrics_data["rsq"].append(metrics[1])
-        metrics_data["Rsq"].append(metrics[2])
-        metrics_data["site-mean RMSE"].append(site_metrics[0])
-        metrics_data["site-mean rsq"].append(site_metrics[1])
-        metrics_data["site-mean Rsq"].append(site_metrics[2])
-        metrics_data["anomaly RMSE"].append(outlier_metrics[0])
-        metrics_data["anomaly rsq"].append(outlier_metrics[1])
-        metrics_data["anomaly Rsq"].append(outlier_metrics[2])
-
-    # Set row names
-    for i, row_name in enumerate(dict.keys()):
-        axes[i, 0].set_ylabel(row_name, fontsize=16)
-
-    axes[-1, 0].set_xlabel("All", fontsize=16)
-    axes[-1, 1].set_xlabel("Site-Mean", fontsize=16)
-    axes[-1, 2].set_xlabel("Anomaly", fontsize=16)
+    ### START TRAINING ###
     
-    final_metrics = pd.DataFrame(metrics_data)
-    return final_metrics, final_fig
-    
+    run_name = args.run_name
+    # dataset = args.dataset
+    rho = args.rho
+    nh = args.nh
 
-def inference(model, data_tuple, rho, inputs, axes=None, set="test"): 
-    # set up data model
-    df, trainInd, testInd, nMat, pSLst, pLLst, pMLst, x, xc, yc = data_tuple
+    epochs = args.epochs
+    learning_rate = args.learning_rate
+    nIterEp = args.iters_per_epoch
+    sched_start_epoch = args.sched_start_epoch
+    optimizer = args.optimizer
+    global DROPOUT
+    DROPOUT = args.dropout
+    batch_size = args.batch_size
+    test_epoch = args.test_epoch
+    satellites = args.satellites
+
+    if not args.testing:
+        wandb.init(dir=os.path.join(kPath.dirVeg))
+        wandb.run.name = run_name
+        
+    dataName = args.dataset
+    importlib.reload(hydroDL.data.dbVeg)
+    df = dbVeg.DataFrameVeg(dataName)
     dm = DataModel(X=df.x, XC=df.xc, Y=df.y)
-    dm.trans(mtdDefault='minmax') 
-
-    selectedInd = testInd if set == "test" else trainInd
-
-    # variables of interest
+    siteIdLst = df.siteIdLst
+    dm.trans(mtdDefault='minmax')
+    dataTup = dm.getData()
+    dataEnd, (iInd, jInd) = dataTs2Range(dataTup, rho, returnInd=True)
+    x, xc, y, yc = dataEnd
+    
+    iInd = np.array(iInd)
+    jInd = np.array(jInd)
+    
+    # calculate position
     varS = ['VV', 'VH', 'vh_vv']
     varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
-    varM = ['Fpar', 'Lai']
+    varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
+
     iS = [df.varX.index(var) for var in varS]
     iL = [df.varX.index(var) for var in varL]
     iM = [df.varX.index(var) for var in varM]
-    yOut = np.zeros(len(selectedInd))
+    
+    pSLst, pLLst, pMLst = list(), list(), list()
+    ns = yc.shape[0]
+    nMat = np.zeros([yc.shape[0], 3])
+    for k in range(nMat.shape[0]):
+        tempS = x[:, k, iS]
+        pS = np.where(~np.isnan(tempS).any(axis=1))[0]
+        tempL = x[:, k, iL]
+        pL = np.where(~np.isnan(tempL).any(axis=1))[0]
+        tempM = x[:, k, iM]
+        pM = np.where(~np.isnan(tempM).any(axis=1))[0]
+        pSLst.append(pS)
+        pLLst.append(pL)
+        pMLst.append(pM)
+        nMat[k, :] = [len(pS), len(pL), len(pM)]
+    
+    np.where(nMat == 0)
+    np.sum((np.where(nMat == 0)[1]) == 0)
+    
+    indKeep = np.where((nMat > 0).all(axis=1))[0]
+    x = x[:, indKeep, :]
+    xc = xc[indKeep, :]
+    yc = yc[indKeep, :]
+    nMat = nMat[indKeep, :]
+    pSLst = [pSLst[k] for k in indKeep]
+    pLLst = [pLLst[k] for k in indKeep]
+    pMLst = [pMLst[k] for k in indKeep]
+    
+    jInd = jInd[indKeep]
+    siteIdLst = [siteIdLst[k] for k in jInd]
+    
+    # split train and test
+    jSite, count = np.unique(jInd, return_counts=True)
+    countAry = np.array([[x, y] for y, x in sorted(zip(count, jSite))])
+    
+  
+    # save data
+    dataFolder = os.path.join(kPath.dirVeg, 'model', 'attention', 'dataset')
+    subsetFile = os.path.join(dataFolder, 'subset.json')
 
-    model.eval()
+    with open(subsetFile) as json_file:
+        dictSubset = json.load(json_file)
+    print("loaded dictSubset")
+    
+    trainInd = dictSubset['trainInd_k05']
+    testInd = dictSubset['testInd_k05']
+    testIndBelow = dictSubset['testInd_underThresh']
+    
+    bS = 8
+    bL = 6
+    bM = 10
 
-    # iterate thru data, run predictions 
-    for k, ind in enumerate(selectedInd):
-        xS = x[pSLst[ind], ind, :][:, iS][None, ...]
-        xL = x[pLLst[ind], ind, :][:, iL][None, ...]
-        xM = x[pMLst[ind], ind, :][:, iM][None, ...]
-        pS = (pSLst[ind][None, ...] - rho) / rho
-        pL = (pLLst[ind][None, ...] - rho) / rho
-        pM = (pMLst[ind][None, ...] - rho) / rho
-        xcT = xc[ind][None, ...]
-        xS = torch.from_numpy(xS).float()
-        xL = torch.from_numpy(xL).float()
-        xM = torch.from_numpy(xM).float()
-        pS = torch.from_numpy(pS).float()
-        pL = torch.from_numpy(pL).float()
-        pM = torch.from_numpy(pM).float()
-        xcT = torch.from_numpy(xcT).float()
+    model = 
+    test(df, testInd, testIndBelow, ep, metrics)
+
+
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train model")
+    # admin
+    parser.add_argument("--run_name", type=str, required=True)
+    parser.add_argument("--testing", type=bool, default=False)
+    parser.add_argument("--cross_val", type=bool, default=False)
+    parser.add_argument("--weights_path", type=str, default="")
+    parser.add_argument("--device", type=int, default=-1)
+    # dataset 
+    parser.add_argument("--dataset", type=str, default="singleDaily",
+                        choices=["singleDaily", "singleDaily-modisgrid", "singleDaily-nadgrid"])
+    parser.add_argument("--rho", type=int, default=45)
+    parser.add_argument("--satellites", type=str, default="all")
+    # model
+    parser.add_argument("--nh", type=int, default=32)
+    parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "sgd"])
+    parser.add_argument("--dropout", type=float, default=0.1)
+    # training
+    parser.add_argument("--batch_size", type=int, default=1000)
+    parser.add_argument("--epochs", type=int, default=1000)
+    parser.add_argument("--learning_rate", type=float, default=1e-2)
+    parser.add_argument("--iters_per_epoch", type=int, default=20)
+    parser.add_argument("--sched_start_epoch", type=int, default=200)
+    parser.add_argument("--test_epoch", type=int, default=50)
+    parser.add_argument("--sample", type=bool, default=False)
+    args = parser.parse_args()
+    
+    # create save dir / save hyperparameters
+    saveFolder = ""
+    if not args.testing:
+        saveFolder = os.path.join(kPath.dirVeg, 'runs', f"{args.run_name}")
         
-        if inputs == "no_M":
-            lTup = (xS.shape[1], xL.shape[1])
-            yP = model((xS, xL), (pS, pL), xcT, lTup)
-        elif inputs == "no_S":
-            lTup = (xL.shape[1], xM.shape[1])
-            yP = model((xL, xM), (pL, pM), xcT, lTup)
-        elif inputs == "no_L":
-            lTup = (xS.shape[1], xM.shape[1])
-            yP = model((xS, xM), (pS, pM), xcT, lTup)
+        if not os.path.exists(saveFolder):
+            os.mkdir(saveFolder)
         else:
-            lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
-            yP = model((xS, xL, xM), (pS, pL, pM), xcT, lTup)
-        
-        yOut[k] = yP.detach().numpy()
-
-    yT = yc[selectedInd, 0]
-    obs = dm.transOutY(yT[:, None])[:, 0]
-    pred = dm.transOutY(yOut[:, None])[:, 0]
+            raise Exception("Run already exists!")
     
-    metrics = calc_metrics(obs, pred)
-    # if not axes:
-    #     fig = plot(obs, pred, axes[0])
+        json_fname = os.path.join(saveFolder, "hyperparameters.json")
+        with open(json_fname, 'w') as f:
+            tosave = vars(args)
+            json.dump(tosave, f, indent=4)
 
-    # SITE MEAN
-    dataTup = dm.getData()
-    dataEnd, (iInd, jInd) = dataTs2Range(dataTup, rho, returnInd=True)
-    tempS = jInd[selectedInd]
-    tempT = iInd[selectedInd]
-    site = np.unique(tempS)
-    # siteLst = list()
-    matResult = np.ndarray([len(site), 3])
-    
-    for i, k in enumerate(site):
-        ind = np.where(tempS == k)[0]
-        t = df.t[tempT[ind]]
-        siteName = df.siteIdLst[k]
-        # siteLst.append([pred[ind], obs[ind], t])
-        matResult[i, 0] = np.mean(pred[ind])
-        matResult[i, 1] = np.mean(obs[ind])
-        matResult[i, 2] = np.corrcoef(pred[ind], obs[ind])[0, 1]
-
-    site_metrics = calc_metrics(matResult[:, 0], matResult[:, 1])
-    # if not axes:
-    #     site_fig = plot(matResult[:, 0], matResult[:, 1], axes[1])
-    
-    # OUTLIER
-    obs_dev_site_mean = []
-    pred_dev_site_mean = []
-    for i, k in enumerate(site):
-        ind = np.where(tempS == k)[0]
-        obs_dev_site_mean.append(obs[ind] - np.mean(obs[ind]))
-        pred_dev_site_mean.append(pred[ind] - np.mean(pred[ind]))
-    obs_dev_site_mean = np.concatenate(obs_dev_site_mean)
-    pred_dev_site_mean = np.concatenate(pred_dev_site_mean)
-
-    # outlier_fig = plot(obs_dev_site_mean, pred_dev_site_mean, axes[2])
-    outlier_metrics = calc_metrics(obs_dev_site_mean, pred_dev_site_mean)
+    train(args, saveFolder)
 
 
-    return None, (metrics, site_metrics, outlier_metrics)
-
-
-def create_map(run_info, rho=45, nh=32, inputs=""):
-    with open(os.path.join(kPath.dirVeg, 'data_folds.pkl'), 'rb') as f:
-        data_tuple = pickle.load(f)[0]
-        
-    path, epoch = run_info
- 
-    nTup, nxc, lTup = data.get_shapes(data_tuple, rho, "")  
-    model = FinalModel(nTup, nxc, nh, "default")
-    model_weights = os.path.join(kPath.dirVeg, "runs", path)
-    model.load_state_dict(torch.load(model_weights))
-
-    df, trainInd, testInd, nMat, pSLst, pLLst, pMLst, x, xc, yc = data_tuple
-    dm = DataModel(X=df.x, XC=df.xc, Y=df.y)
-    dm.trans(mtdDefault='minmax') 
-
-    selectedInd = testInd
-
-    # variables of interest
-    varS = ['VV', 'VH', 'vh_vv']
-    varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
-    varM = ['Fpar', 'Lai']
-    iS = [df.varX.index(var) for var in varS]
-    iL = [df.varX.index(var) for var in varL]
-    iM = [df.varX.index(var) for var in varM]
-    yOut = np.zeros(len(selectedInd))
-
-    model.eval()
-
-    # iterate thru data, run predictions 
-    for k, ind in enumerate(selectedInd):
-        xS = x[pSLst[ind], ind, :][:, iS][None, ...]
-        xL = x[pLLst[ind], ind, :][:, iL][None, ...]
-        xM = x[pMLst[ind], ind, :][:, iM][None, ...]
-        pS = (pSLst[ind][None, ...] - rho) / rho
-        pL = (pLLst[ind][None, ...] - rho) / rho
-        pM = (pMLst[ind][None, ...] - rho) / rho
-        xcT = xc[ind][None, ...]
-        xS = torch.from_numpy(xS).float()
-        xL = torch.from_numpy(xL).float()
-        xM = torch.from_numpy(xM).float()
-        pS = torch.from_numpy(pS).float()
-        pL = torch.from_numpy(pL).float()
-        pM = torch.from_numpy(pM).float()
-        xcT = torch.from_numpy(xcT).float()
-        
-        if inputs == "no_M":
-            lTup = (xS.shape[1], xL.shape[1])
-            yP = model((xS, xL), (pS, pL), xcT, lTup)
-        elif inputs == "no_S":
-            lTup = (xL.shape[1], xM.shape[1])
-            yP = model((xL, xM), (pL, pM), xcT, lTup)
-        elif inputs == "no_L":
-            lTup = (xS.shape[1], xM.shape[1])
-            yP = model((xS, xM), (pS, pM), xcT, lTup)
-        else:
-            lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
-            yP = model((xS, xL, xM), (pS, pL, pM), xcT, lTup)
-        
-        yOut[k] = yP.detach().numpy()
-
-    yT = yc[selectedInd, 0]
-    obs = dm.transOutY(yT[:, None])[:, 0]
-    pred = dm.transOutY(yOut[:, None])[:, 0]
-    
-    # SITE MEAN
-    dataTup = dm.getData()
-    dataEnd, (iInd, jInd) = dataTs2Range(dataTup, rho, returnInd=True)
-    tempS = jInd[selectedInd]
-    tempT = iInd[selectedInd]
-    site = np.unique(tempS)
-    # siteLst = list()
-    matResult = np.ndarray([len(site), 3])
-    
-    for i, k in enumerate(site):
-        ind = np.where(tempS == k)[0]
-        t = df.t[tempT[ind]]
-        siteName = df.siteIdLst[k]
-        # siteLst.append([pred[ind], obs[ind], t])
-        matResult[i, 0] = np.mean(pred[ind])
-        matResult[i, 1] = np.mean(obs[ind])
-        matResult[i, 2] = np.corrcoef(pred[ind], obs[ind])[0, 1]
-
-    pdb.set_trace()
-    trainSite = np.unique(jInd[trainInd])
-    lat = df.lat[trainSite]
-    lon = df.lon[trainSite]
-    figM = plt.figure(figsize=(8, 6))
-    gsM = gridspec.GridSpec(1, 1)
-    axM = mapplot.mapPoint(
-        figM, gsM[0, 0], lat, lon, np.zeros(len(lat)), cmap='gray', cb=False
-    )
-
-    testSite = np.unique(jInd[testInd])
-    lat2 = df.lat[testSite]
-    lon2 = df.lon[testSite]
-    figM2 = plt.figure(figsize=(8, 6))
-    gsM2 = gridspec.GridSpec(1, 1)
-    axM2 = mapplot.mapPoint(figM2, gsM2[0, 0], lat2, lon2, matResult[:, 2], s=50)
-
-    return figM, figM2

@@ -1,1 +1,0 @@
-python src/train.py --run TEST_new_data3
