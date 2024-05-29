@@ -2,6 +2,7 @@
 from torch import nn
 import torch
 import math
+import numpy as np
 
 
 class InputFeature(nn.Module):
@@ -15,18 +16,22 @@ class InputFeature(nn.Module):
                 nn.Sequential(nn.Linear(n, nh), nn.ReLU(), nn.Linear(nh, nh))
             )
 
-    def getPos(self, pos):
+    def getPos(self, xTup):
         nh = self.nh
-        P = torch.zeros([pos.shape[0], pos.shape[1], nh], dtype=torch.float32)
+        P = torch.zeros([xTup.shape[0], xTup.shape[1], nh], dtype=torch.float32)
+        pos = torch.arange(91) - 45
+        # print(xTup.shape)
+        # print(P.shape)
+        # print(pos.shape)
         for i in range(int(nh / 2)):
             P[:, :, 2 * i] = torch.sin(pos / (i + 1) * torch.pi)
             P[:, :, 2 * i + 1] = torch.cos(pos / (i + 1) * torch.pi)
         return P
 
-    def forward(self, xTup, pTup, xc):
+    def forward(self, xTup, xc):
         outLst = list()
         for k in range(len(xTup)):
-            x = self.lnLst[k](xTup[k]) + self.getPos(pTup[k])
+            x = self.lnLst[k](xTup[k]) + self.getPos(xTup[k])
             outLst.append(x)
         outC = self.lnXc(xc)
         out = torch.cat(outLst + [outC[:, None, :]], dim=1)
@@ -42,13 +47,16 @@ class AttentionLayer(nn.Module):
         self.W_v = nn.Linear(nx, nh, bias=False)
         self.W_o = nn.Linear(nh, nh, bias=False)
 
-    def forward(self, x):
-        # pdb.set_trace()
+    def forward(self, x, mask):
         q, k, v = self.W_q(x), self.W_k(x), self.W_v(x)
         d = q.shape[1]
         score = torch.bmm(q, k.transpose(1, 2)) / math.sqrt(d)
-        attention_mask = torch.ones(score.shape)
-        attention = torch.softmax(score * attention_mask, dim=-1)
+
+        batch_size, num_days = mask.shape
+        extended_mask = mask.repeat(1, 1, num_days).reshape(batch_size, num_days, num_days)
+        score[extended_mask == 0] = -np.inf
+        attention = torch.softmax(score, dim=-1)
+        
         out = torch.bmm(attention, v)
         out = self.W_o(out)
         return out
@@ -90,9 +98,9 @@ class FinalModel(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, x, pos, xcT, lTup):
-        xIn = self.encoder(x, pos, xcT)
-        out = self.atten(xIn)
+    def forward(self, x, xcT, lTup, mask):
+        xIn = self.encoder(x, xcT)
+        out = self.atten(xIn, mask)
         out = self.addnorm1(xIn, out)
         out = self.ffn1(out)
         out = self.addnorm2(xIn, out)

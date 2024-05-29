@@ -20,15 +20,9 @@ import pandas as pd
 import argparse
 import shutil
 
-
-
-
 from torch import nn
 import torch
 import math
-
-import pdb
-
 
 
 class InputFeature(nn.Module):
@@ -42,18 +36,22 @@ class InputFeature(nn.Module):
                 nn.Sequential(nn.Linear(n, nh), nn.ReLU(), nn.Linear(nh, nh))
             )
 
-    def getPos(self, pos):
+    def getPos(self, xTup):
         nh = self.nh
-        P = torch.zeros([pos.shape[0], pos.shape[1], nh], dtype=torch.float32)
+        P = torch.zeros([xTup.shape[0], xTup.shape[1], nh], dtype=torch.float32)
+        pos = torch.arange(91) - 45
+        # print(xTup.shape)
+        # print(P.shape)
+        # print(pos.shape)
         for i in range(int(nh / 2)):
             P[:, :, 2 * i] = torch.sin(pos / (i + 1) * torch.pi)
             P[:, :, 2 * i + 1] = torch.cos(pos / (i + 1) * torch.pi)
         return P
 
-    def forward(self, xTup, pTup, xc):
+    def forward(self, xTup, xc):
         outLst = list()
         for k in range(len(xTup)):
-            x = self.lnLst[k](xTup[k]) + self.getPos(pTup[k])
+            x = self.lnLst[k](xTup[k]) + self.getPos(xTup[k])
             outLst.append(x)
         outC = self.lnXc(xc)
         out = torch.cat(outLst + [outC[:, None, :]], dim=1)
@@ -69,13 +67,16 @@ class AttentionLayer(nn.Module):
         self.W_v = nn.Linear(nx, nh, bias=False)
         self.W_o = nn.Linear(nh, nh, bias=False)
 
-    def forward(self, x):
-        # pdb.set_trace()
+    def forward(self, x, mask):
         q, k, v = self.W_q(x), self.W_k(x), self.W_v(x)
         d = q.shape[1]
         score = torch.bmm(q, k.transpose(1, 2)) / math.sqrt(d)
-        attention_mask = torch.ones(score.shape)
-        attention = torch.softmax(score * attention_mask, dim=-1)
+
+        batch_size, num_days = mask.shape
+        extended_mask = mask.repeat(1, 1, num_days).reshape(batch_size, num_days, num_days)
+        score[extended_mask == 0] = -np.inf
+        attention = torch.softmax(score, dim=-1)
+        
         out = torch.bmm(attention, v)
         out = self.W_o(out)
         return out
@@ -117,9 +118,9 @@ class FinalModel(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, x, pos, xcT, lTup):
-        xIn = self.encoder(x, pos, xcT)
-        out = self.atten(xIn)
+    def forward(self, x, xcT, lTup, mask):
+        xIn = self.encoder(x, xcT)
+        out = self.atten(xIn, mask)
         out = self.addnorm1(xIn, out)
         out = self.ffn1(out)
         out = self.addnorm2(xIn, out)
@@ -135,8 +136,8 @@ class FinalModel(nn.Module):
 
 
 
-def train(args, saveFolder):
-    def randomSubset(opt='train', batch=1000, sample=False):
+def train(args):
+    def randomSubset(satellites, opt='train', batch=1000):
         # random sample within window
         varS = ['VV', 'VH', 'vh_vv']
         varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
@@ -154,37 +155,37 @@ def train(args, saveFolder):
         iM = [df.varX.index(var) for var in varM]
         ns = len(indSel)
         
-        rS = np.random.randint(0, nMat[indSel, 0], [bS, ns]).T
-        rL = np.random.randint(0, nMat[indSel, 1], [bL, ns]).T
-        rM = np.random.randint(0, nMat[indSel, 2], [bM, ns]).T
-        pS = np.stack([pSLst[indSel[k]][rS[k, :]] for k in range(ns)], axis=0)
-        pL = np.stack([pLLst[indSel[k]][rL[k, :]] for k in range(ns)], axis=0)
-        pM = np.stack([pMLst[indSel[k]][rM[k, :]] for k in range(ns)], axis=0)
         matS1 = x[:, indSel, :][:, :, iS]
         matL1 = x[:, indSel, :][:, :, iL]
         matM1 = x[:, indSel, :][:, :, iM]
-        xS = np.stack([matS1[pS[k, :], k, :] for k in range(ns)], axis=0)
-        xL = np.stack([matL1[pL[k, :], k, :] for k in range(ns)], axis=0)
-        xM = np.stack([matM1[pM[k, :], k, :] for k in range(ns)], axis=0)
-        
-        pS = (pS - rho) / rho
-        pL = (pL - rho) / rho
-        pM = (pM - rho) / rho
+        xS = np.swapaxes(matS1, 0, 1)
+        xL = np.swapaxes(matL1, 0, 1)
+        xM = np.swapaxes(matM1, 0, 1)
+
+        maskS1 = ~np.isnan(xS[:, :, 0])
+        maskL1 = ~np.isnan(xL[:, :, 0])
+        maskM1 = ~np.isnan(xM[:, :, 0])
+        xS[np.isnan(xS)] = 0
+        xL[np.isnan(xL)] = 0
+        xM[np.isnan(xM)] = 0
+
+        if satellites == 'no_landsat':
+            mask = np.concatenate((maskS1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+        else: 
+            mask = np.concatenate((maskS1, maskL1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
         
         return (
             torch.tensor(xS, dtype=torch.float32),
             torch.tensor(xL, dtype=torch.float32),
             torch.tensor(xM, dtype=torch.float32),
-            torch.tensor(pS, dtype=torch.float32),
-            torch.tensor(pL, dtype=torch.float32),
-            torch.tensor(pM, dtype=torch.float32),
             torch.tensor(xc[indSel, :], dtype=torch.float32),
             torch.tensor(yc[indSel, 0], dtype=torch.float32),
+            torch.tensor(mask, dtype=torch.int)
         )
     
 
 
-    def test(df, testInd, testIndBelow, ep, metric):
+    def test(df, testInd, testIndBelow, ep, satellites, metrics):
         # test
         model.eval()
         varS = ['VV', 'VH', 'vh_vv']
@@ -200,32 +201,41 @@ def train(args, saveFolder):
         
         for k, ind in enumerate(testInd):
             k
-            xS = x[pSLst[ind], ind, :][:, iS][None, ...]
-            xL = x[pLLst[ind], ind, :][:, iL][None, ...]
-            xM = x[pMLst[ind], ind, :][:, iM][None, ...]
-            pS = (pSLst[ind][None, ...] - rho) / rho
-            pL = (pLLst[ind][None, ...] - rho) / rho
-            pM = (pMLst[ind][None, ...] - rho) / rho
+            matS1 = x[:, ind, :][:, iS]
+            matL1 = x[:, ind, :][:, iL]
+            matM1 = x[:, ind, :][:, iM]
+            xS = matS1[None, ...]
+            xL = matL1[None, ...]
+            xM = matM1[None, ...]
+            maskS1 = ~np.isnan(xS[:, :, 0])
+            maskL1 = ~np.isnan(xL[:, :, 0])
+            maskM1 = ~np.isnan(xM[:, :, 0])
+            xS[np.isnan(xS)] = 0
+            xL[np.isnan(xL)] = 0
+            xM[np.isnan(xM)] = 0
+            if satellites == 'no_landsat':
+                mask = np.concatenate((maskS1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+            else: 
+                mask = np.concatenate((maskS1, maskL1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+       
             xcT = xc[ind][None, ...]
             xS = torch.from_numpy(xS).float()
             xL = torch.from_numpy(xL).float()
             xM = torch.from_numpy(xM).float()
-            pS = torch.from_numpy(pS).float()
-            pL = torch.from_numpy(pL).float()
-            pM = torch.from_numpy(pM).float()
             xcT = torch.from_numpy(xcT).float()
+            mask = torch.from_numpy(mask).int()
 
             xTup, pTup, lTup = (), (), ()
             if satellites == "no_landsat":
                 xTup = (xS, xM)
-                pTup = (pS, pM)
+                # pTup = (pS, pM)
                 lTup = (xS.shape[1], xM.shape[1])
             else:
                 xTup = (xS, xL, xM)
-                pTup = (pS, pL, pM)
+                # pTup = (pS, pL, pM)
                 lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
-            
-            yP = model(xTup, pTup, xcT, lTup)
+
+            yP = model(xTup, xcT, lTup, mask)
             
             yOut[k] = yP.detach().numpy()
         
@@ -251,7 +261,6 @@ def train(args, saveFolder):
         tempS = jInd[testInd]
         tempT = iInd[testInd]
         testSite = np.unique(tempS)
-        pdb.set_trace()
         siteLst = list()
         matResult = np.ndarray([len(testSite), 3])
         for i, k in enumerate(testSite):
@@ -321,35 +330,50 @@ def train(args, saveFolder):
         iL = [df.varX.index(var) for var in varL]
         iM = [df.varX.index(var) for var in varM]
         yOut = np.zeros(len(testInd))
+
+        
         
         for k, ind in enumerate(testInd):
             k
-            xS = x[pSLst[ind], ind, :][:, iS][None, ...]
-            xL = x[pLLst[ind], ind, :][:, iL][None, ...]
-            xM = x[pMLst[ind], ind, :][:, iM][None, ...]
-            pS = (pSLst[ind][None, ...] - rho) / rho
-            pL = (pLLst[ind][None, ...] - rho) / rho
-            pM = (pMLst[ind][None, ...] - rho) / rho
+            matS1 = x[:, ind, :][:, iS]
+            matL1 = x[:, ind, :][:, iL]
+            matM1 = x[:, ind, :][:, iM]
+            xS = matS1[None, ...]
+            xL = matL1[None, ...]
+            xM = matM1[None, ...]
+            # xS = np.swapaxes(matS1, 0, 1)
+            # xL = np.swapaxes(matL1, 0, 1)
+            # xM = np.swapaxes(matM1, 0, 1)
+    
+            maskS1 = ~np.isnan(xS[:, :, 0])
+            maskL1 = ~np.isnan(xL[:, :, 0])
+            maskM1 = ~np.isnan(xM[:, :, 0])
+            xS[np.isnan(xS)] = 0
+            xL[np.isnan(xL)] = 0
+            xM[np.isnan(xM)] = 0
+            if satellites == 'no_landsat':
+                mask = np.concatenate((maskS1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+            else: 
+                mask = np.concatenate((maskS1, maskL1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+       
             xcT = xc[ind][None, ...]
             xS = torch.from_numpy(xS).float()
             xL = torch.from_numpy(xL).float()
             xM = torch.from_numpy(xM).float()
-            pS = torch.from_numpy(pS).float()
-            pL = torch.from_numpy(pL).float()
-            pM = torch.from_numpy(pM).float()
             xcT = torch.from_numpy(xcT).float()
+            mask = torch.from_numpy(mask).int()
 
             xTup, pTup, lTup = (), (), ()
             if satellites == "no_landsat":
                 xTup = (xS, xM)
-                pTup = (pS, pM)
+                # pTup = (pS, pM)
                 lTup = (xS.shape[1], xM.shape[1])
             else:
                 xTup = (xS, xL, xM)
-                pTup = (pS, pL, pM)
+                # pTup = (pS, pL, pM)
                 lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
             
-            yP = model(xTup, pTup, xcT, lTup)
+            yP = model(xTup, xcT, lTup, mask)
             yOut[k] = yP.detach().numpy()
         
         yT = yc[testInd, 0]
@@ -457,28 +481,38 @@ def train(args, saveFolder):
 
     
     ### START TRAINING ###
+    model_dir_path = os.path.join(kPath.dirVeg, 'runs', args.model_dir)
+    hyperparameters_path = os.path.join(model_dir_path, 'hyperparameters.json')
+
+    with open(hyperparameters_path, 'r') as j:
+        hyperparameters = json.loads(j.read())
+        dataset = hyperparameters['dataset']
+        satellites = hyperparameters['satellites']
+        nh = hyperparameters['nh']
+        rho = hyperparameters['rho']
     
-    run_name = args.run_name
-    # dataset = args.dataset
-    rho = args.rho
-    nh = args.nh
+    # run_name = args.run_name
+    # # dataset = args.dataset
+    # rho = args.rho
+    # nh = args.nh
 
-    epochs = args.epochs
-    learning_rate = args.learning_rate
-    nIterEp = args.iters_per_epoch
-    sched_start_epoch = args.sched_start_epoch
-    optimizer = args.optimizer
+    # epochs = args.epochs
+    # learning_rate = args.learning_rate
+    # nIterEp = args.iters_per_epoch
+    # sched_start_epoch = args.sched_start_epoch
+    # optimizer = args.optimizer
     global DROPOUT
-    DROPOUT = args.dropout
-    batch_size = args.batch_size
-    test_epoch = args.test_epoch
-    satellites = args.satellites
+    DROPOUT = 0
+    # DROPOUT = args.dropout
+    # batch_size = args.batch_size
+    # test_epoch = args.test_epoch
+    # satellites = args.satellites
 
-    if not args.testing:
-        wandb.init(dir=os.path.join(kPath.dirVeg))
-        wandb.run.name = run_name
+    # if not args.testing:
+    #     wandb.init(dir=os.path.join(kPath.dirVeg))
+    #     wandb.run.name = run_name
         
-    dataName = args.dataset
+    dataName = dataset
     importlib.reload(hydroDL.data.dbVeg)
     df = dbVeg.DataFrameVeg(dataName)
     dm = DataModel(X=df.x, XC=df.xc, Y=df.y)
@@ -557,7 +591,7 @@ def train(args, saveFolder):
     bL = 6
     bM = 10
 
-    xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train', batch=batch_size, sample=args.sample)
+    xS, xL, xM, xcT, yT, mask = randomSubset(satellites, opt='train')
 
     nTup, lTup = (), ()
     if satellites == "no_landsat":
@@ -570,154 +604,126 @@ def train(args, saveFolder):
     
     nxc = xc.shape[-1]
     model = FinalModel(nTup, nxc, nh)
-    loss_fn = nn.L1Loss(reduction='mean')
+    model_weights_path = os.path.join(model_dir_path, 'best_model.pth')
+    model.load_state_dict(torch.load(model_weights_path))
+    # yP = model(xTup, pTup, xcT, lTup)
+    
+    # loss_fn = nn.L1Loss(reduction='mean')
 
-    if optimizer == "adam":
-        optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    else:
-        optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+    # if optimizer == "adam":
+    #     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    # else:
+    #     optimizer = optim.SGD(model.parameters(), lr=learning_rate)
         
-    scheduler = lr_scheduler.LinearLR(
-        optimizer, start_factor=1.0, end_factor=0.01, total_iters=800
-    )
+    # scheduler = lr_scheduler.LinearLR(
+    #     optimizer, start_factor=1.0, end_factor=0.01, total_iters=800
+    # )
     
     model.train()
-    for ep in range(epochs):
+    for ep in range(1):
         lossEp = 0
         metrics = {"train_loss" : 0, "train_RMSE" : 0, "train_rsq" : 0, "train_Rsq" : 0}
-        for i in range(nIterEp):
-            t0 = time.time()
-            xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train', batch=batch_size, sample=args.sample)
-            t1 = time.time()
-            model.zero_grad()
+        # for i in range(nIterEp): 
+        #     t0 = time.time()
+        #     xS, xL, xM, xcT, yT, mask = randomSubset(args.satellites, opt='train', batch=batch_size)
+        #     t1 = time.time()
+        #     model.zero_grad()
 
-            xTup, pTup = (), ()
-            if satellites == "no_landsat":
-                xTup = (xS, xM)
-                pTup = (pS, pM)
-            else:
-                xTup = (xS, xL, xM)
-                pTup = (pS, pL, pM)
-            
-            yP = model(xTup, pTup, xcT, lTup)      
-            loss = loss_fn(yP, yT)
-            loss.backward()
-            t2 = time.time()
-            lossEp = lossEp + loss.item()
-            optimizer.step()
+        #     xTup, pTup = (), ()
+        #     if satellites == "no_landsat":
+        #         xTup = (xS, xM)
+        #         # pTup = (pS, pM)
+        #     else:
+        #         xTup = (xS, xL, xM)
+        #         # pTup = (pS, pL, pM)
+
+        #     yP = model(xTup, xcT, lTup, mask)      
+        #     loss = loss_fn(yP, yT)
+        #     loss.backward()
+        #     t2 = time.time()
+        #     lossEp = lossEp + loss.item()
+        #     optimizer.step()
     
-            metrics["train_loss"] += loss.item()
-            with torch.no_grad():
-                obs, pred = yP.detach().numpy(), yT.detach().numpy()
-                rmse = np.sqrt(np.mean((obs - pred) ** 2))
-                corrcoef = np.corrcoef(obs, pred)[0, 1]
-                coef_det = r2_score(obs, pred)
-                metrics["train_RMSE"]+= rmse
-                metrics["train_rsq"] += corrcoef
-                metrics["train_Rsq"] += coef_det
+        #     metrics["train_loss"] += loss.item()
+        #     with torch.no_grad():
+        #         obs, pred = yP.detach().numpy(), yT.detach().numpy()
+        #         rmse = np.sqrt(np.mean((obs - pred) ** 2))
+        #         corrcoef = np.corrcoef(obs, pred)[0, 1]
+        #         coef_det = r2_score(obs, pred)
+        #         metrics["train_RMSE"]+= rmse
+        #         metrics["train_rsq"] += corrcoef
+        #         metrics["train_Rsq"] += coef_det
     
-        metrics = {metric : sum / nIterEp for metric, sum in metrics.items()}
+        # metrics = {metric : sum / nIterEp for metric, sum in metrics.items()}
         
-        optimizer.zero_grad()
-        xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='test', batch=1000, sample=args.sample)
+        # optimizer.zero_grad()
+        # xS, xL, xM, xcT, yT, mask = randomSubset(args.satellites, opt='test', batch=1000)
 
-        xTup, pTup = (), ()
-        if satellites == "no_landsat":
-            xTup = (xS, xM)
-            pTup = (pS, pM)
-        else:
-            xTup = (xS, xL, xM)
-            pTup = (pS, pL, pM)
+        # xTup, pTup = (), ()
+        # if satellites == "no_landsat":
+        #     xTup = (xS, xM)
+        #     # pTup = (pS, pM)
+        # else:
+        #     xTup = (xS, xL, xM)
+        #     # pTup = (pS, pL, pM)
         
-        yP = model(xTup, pTup, xcT, lTup)
-        loss = loss_fn(yP, yT)
+        # yP = model(xTup, xcT, lTup, mask)
+        # loss = loss_fn(yP, yT)
     
-        metrics["test_loss"] = loss_fn(yP, yT).item()
-        obs, pred = yP.detach().numpy(), yT.detach().numpy()
-        rmse = np.sqrt(np.mean((obs - pred) ** 2))
-        corrcoef = np.corrcoef(obs, pred)[0, 1]
-        coef_det = r2_score(obs, pred)
-        with torch.no_grad():
-            metrics["test_RMSE"]= rmse
-            metrics["test_rsq"] = corrcoef
-            metrics["test_Rsq"] = coef_det
+        # metrics["test_loss"] = loss_fn(yP, yT).item()
+        # obs, pred = yP.detach().numpy(), yT.detach().numpy()
+        # rmse = np.sqrt(np.mean((obs - pred) ** 2))
+        # corrcoef = np.corrcoef(obs, pred)[0, 1]
+        # coef_det = r2_score(obs, pred)
+        # with torch.no_grad():
+        #     metrics["test_RMSE"]= rmse
+        #     metrics["test_rsq"] = corrcoef
+        #     metrics["test_Rsq"] = coef_det
         
-        if ep > sched_start_epoch:
-            scheduler.step()
-        print(
-            '{} {:.3f} {:.3f} {:.3f} time {:.2f} {:.2f}'.format(
-                ep, lossEp / nIterEp, loss.item(), corrcoef, t1 - t0, t2 - t1
-            )
-        )
+        # if ep > sched_start_epoch:
+        #     scheduler.step()
+        # print(
+        #     '{} {:.3f} {:.3f} {:.3f} time {:.2f} {:.2f}'.format(
+        #         ep, lossEp / nIterEp, loss.item(), corrcoef, t1 - t0, t2 - t1
+        #     )
+        # )
 
-        if ep > 0 and ep % test_epoch == 0:
-            test(df, testInd, testIndBelow, ep, metrics)
+        # if ep > 0 and ep % test_epoch == 0:
+        #     print("testing on full test set")
+        test(df, testInd, testIndBelow, ep, satellites, metrics)
 
-        if not args.testing:
-            wandb.log(metrics)
+        # if not args.testing:
+        #     wandb.log(metrics)
 
-    metrics_path = os.path.join(saveFolder, 'metrics.csv')
-    metrics = pd.read_csv(metrics_path)
+    # metrics_path = os.path.join(saveFolder, 'metrics.csv')
+    # metrics = pd.read_csv(metrics_path)
 
-    best_metrics = metrics[metrics.qual_obs_coefdet == max(metrics.qual_obs_coefdet)]
-    best_metrics['run_name'] = [run_name]
-    best_metrics = best_metrics[['run_name'] + [x for x in best_metrics.columns if x != 'run_name']]
+    # best_metrics = metrics[metrics.qual_obs_coefdet == max(metrics.qual_obs_coefdet)]
+    # best_metrics['run_name'] = [run_name]
+    # best_metrics = best_metrics[['run_name'] + [x for x in best_metrics.columns if x != 'run_name']]
     
-    old_best_model_path = os.path.join(saveFolder, f'model_ep{int(best_metrics.iloc[0].epoch)}.pth')
-    new_best_model_path = os.path.join(saveFolder, 'best_model.pth')
-    shutil.copyfile(old_best_model_path, new_best_model_path)
+    # old_best_model_path = os.path.join(saveFolder, f'model_ep{int(best_metrics.iloc[0].epoch)}.pth')
+    # new_best_model_path = os.path.join(saveFolder, 'best_model.pth')
+    # shutil.copyfile(old_best_model_path, new_best_model_path)
 
-    all_metrics_path = os.path.join(kPath.dirVeg, 'runs', 'best_metrics_all_runs.csv')
-    if os.path.exists(all_metrics_path):
-        all_metrics = pd.read_csv(all_metrics_path)
-        all_metrics = pd.concat([all_metrics, best_metrics])
-        all_metrics.to_csv(all_metrics_path, index=False)
-    else:
-        best_metrics.to_csv(all_metrics_path, index=False)
+    # all_metrics_path = os.path.join(kPath.dirVeg, 'runs', 'best_metrics_all_runs.csv')
+    # if os.path.exists(all_metrics_path):
+    #     all_metrics = pd.read_csv(all_metrics_path)
+    #     all_metrics = pd.concat([all_metrics, best_metrics])
+    #     all_metrics.to_csv(all_metrics_path, index=False)
+    # else:
+    #     best_metrics.to_csv(all_metrics_path, index=False)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train model")
     # admin
-    parser.add_argument("--run_name", type=str, required=True)
-    parser.add_argument("--testing", type=bool, default=False)
-    parser.add_argument("--cross_val", type=bool, default=False)
-    parser.add_argument("--weights_path", type=str, default="")
     parser.add_argument("--device", type=int, default=-1)
-    # dataset 
-    parser.add_argument("--dataset", type=str, default="singleDaily-nadgrid",
-                        choices=["singleDaily", "singleDaily-modisgrid", "singleDaily-nadgrid"])
-    parser.add_argument("--rho", type=int, default=45)
-    parser.add_argument("--satellites", type=str, default="all")
-    # model
-    parser.add_argument("--nh", type=int, default=32)
-    parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "sgd"])
-    parser.add_argument("--dropout", type=float, default=0.1)
-    # training
-    parser.add_argument("--batch_size", type=int, default=1000)
-    parser.add_argument("--epochs", type=int, default=1000)
-    parser.add_argument("--learning_rate", type=float, default=1e-2)
-    parser.add_argument("--iters_per_epoch", type=int, default=20)
-    parser.add_argument("--sched_start_epoch", type=int, default=200)
-    parser.add_argument("--test_epoch", type=int, default=50)
-    parser.add_argument("--sample", type=bool, default=False)
+    parser.add_argument("--model_dir", type=str)
+    # save
+    parser.add_argument("--save_folder", type=str, default=kPath.dirVeg)
     args = parser.parse_args()
-    
-    # create save dir / save hyperparameters
-    saveFolder = ""
-    if not args.testing:
-        saveFolder = os.path.join(kPath.dirVeg, 'runs', f"{args.run_name}")
-        
-        if not os.path.exists(saveFolder):
-            os.mkdir(saveFolder)
-        else:
-            raise Exception("Run already exists!")
-    
-        json_fname = os.path.join(saveFolder, "hyperparameters.json")
-        with open(json_fname, 'w') as f:
-            tosave = vars(args)
-            json.dump(tosave, f, indent=4)
 
-    train(args, saveFolder)
+    train(args)
 
 

@@ -8,8 +8,8 @@ from sklearn.metrics import r2_score
 import pandas as pd
 import argparse
 
-from model import FinalModel
-from data import randomSubset, prepare_data
+from model_all_pick import FinalModel
+from data_all_pick import randomSubset, prepare_data
 
 import pdb
 
@@ -36,6 +36,12 @@ def get_metrics(data, indices, config):
     model, satellites  = config["model"], config["satellites"]
 
     model.eval()
+    varS = ['VV', 'VH', 'vh_vv']
+    varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
+    # varM = ["mod_b{}".format(x) for x in range(1, 8)]
+    # varM = ["myd_b{}".format(x) for x in range(1, 8)]
+    # varM = ['Fpar', 'Lai']
+    varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
     iS = [df.varX.index(var) for var in varS]
     iL = [df.varX.index(var) for var in varL]
     iM = [df.varX.index(var) for var in varM]
@@ -43,66 +49,78 @@ def get_metrics(data, indices, config):
     
     for k, ind in enumerate(indices):
         k
-        xS = x[pSLst[ind], ind, :][:, iS][None, ...]
-        xL = x[pLLst[ind], ind, :][:, iL][None, ...]
-        xM = x[pMLst[ind], ind, :][:, iM][None, ...]
-        pS = (pSLst[ind][None, ...] - rho) / rho
-        pL = (pLLst[ind][None, ...] - rho) / rho
-        pM = (pMLst[ind][None, ...] - rho) / rho
+        matS1 = x[:, ind, :][:, iS]
+        matL1 = x[:, ind, :][:, iL]
+        matM1 = x[:, ind, :][:, iM]
+        xS = matS1[None, ...]
+        xL = matL1[None, ...]
+        xM = matM1[None, ...]
+        maskS1 = ~np.isnan(xS[:, :, 0])
+        maskL1 = ~np.isnan(xL[:, :, 0])
+        maskM1 = ~np.isnan(xM[:, :, 0])
+        xS[np.isnan(xS)] = 0
+        xL[np.isnan(xL)] = 0
+        xM[np.isnan(xM)] = 0
+        if satellites == 'no_landsat':
+            mask = np.concatenate((maskS1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+        else: 
+            mask = np.concatenate((maskS1, maskL1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+    
         xcT = xc[ind][None, ...]
         xS = torch.from_numpy(xS).float()
         xL = torch.from_numpy(xL).float()
         xM = torch.from_numpy(xM).float()
-        pS = torch.from_numpy(pS).float()
-        pL = torch.from_numpy(pL).float()
-        pM = torch.from_numpy(pM).float()
         xcT = torch.from_numpy(xcT).float()
+        mask = torch.from_numpy(mask).int()
 
         xTup, pTup, lTup = (), (), ()
         if satellites == "no_landsat":
             xTup = (xS, xM)
-            pTup = (pS, pM)
+            # pTup = (pS, pM)
             lTup = (xS.shape[1], xM.shape[1])
         else:
             xTup = (xS, xL, xM)
-            pTup = (pS, pL, pM)
+            # pTup = (pS, pL, pM)
             lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
+
+        yP = model(xTup, xcT, lTup, mask)
         
-        yP = model(xTup, pTup, xcT, lTup)    
         yOut[k] = yP.detach().numpy()
+        
+    yT = yc[indices, 0]    
     
-    yT = yc[indices, 0]      
     obs = dm.transOutY(yT[:, None])[:, 0]
     pred = dm.transOutY(yOut[:, None])[:, 0]
     
-    # obs
     rmse = np.sqrt(np.mean((obs - pred) ** 2))
     corrcoef = np.corrcoef(obs, pred)[0, 1]
     coef_det = r2_score(obs, pred)
     obs_metrics = [rmse, corrcoef, coef_det]
     
-    # site
+    # to site
     tempS = jInd[indices]
     tempT = iInd[indices]
     testSite = np.unique(tempS)
-    # pdb.set_trace()
     siteLst = list()
     matResult = np.ndarray([len(testSite), 3])
     for i, k in enumerate(testSite):
         ind = np.where(tempS == k)[0]
         t = df.t[tempT[ind]]
-        # siteName = df.siteIdLst[k]
+        siteName = df.siteIdLst[k]
         siteLst.append([pred[ind], obs[ind], t])
         matResult[i, 0] = np.mean(pred[ind])
         matResult[i, 1] = np.mean(obs[ind])
         matResult[i, 2] = np.corrcoef(pred[ind], obs[ind])[0, 1]
-     
+    
+    # mean   
     rmse = np.sqrt(np.mean((matResult[:, 0] - matResult[:, 1]) ** 2))
     corrcoef = np.corrcoef(matResult[:, 0], matResult[:, 1])[0, 1]
     coef_det = r2_score(matResult[:, 0], matResult[:, 1])
     site_metrics = [rmse, corrcoef, coef_det]
+
     
-    # anomaly
+    # anomoly
+
     aLst, bLst = list(), list()
     
     for site in siteLst:
@@ -115,7 +133,7 @@ def get_metrics(data, indices, config):
     corrcoef = np.corrcoef(a,b)[0, 1]
     coef_det = r2_score(a, b)
     anomaly_metrics = [rmse, corrcoef, coef_det]
-    
+
     return (obs_metrics, site_metrics, anomaly_metrics)
 
 
@@ -179,7 +197,7 @@ def main(args):
     split_indices["test_quality"] = dictSubset['testInd_k05']
     split_indices["test_poor"] = dictSubset['testInd_underThresh']
 
-    xS, xL, xM, pS, pL, pM, _, _ = randomSubset(data, split_indices["train"], split_indices["test_quality"], opt='train')
+    xS, xL, xM, xc, yc, mask  = randomSubset(data, split_indices["train"], split_indices["test_quality"], opt='train')
 
     nTup, lTup = (), ()
     if satellites == "no_landsat":

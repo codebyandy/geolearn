@@ -30,7 +30,6 @@ import math
 import pdb
 
 
-
 class InputFeature(nn.Module):
     def __init__(self, nTup, nxc, nh):
         super().__init__()
@@ -135,7 +134,7 @@ class FinalModel(nn.Module):
 
 
 
-def train(args, saveFolder):
+def train(args):
     def randomSubset(opt='train', batch=1000, sample=False):
         # random sample within window
         varS = ['VV', 'VH', 'vh_vv']
@@ -458,27 +457,37 @@ def train(args, saveFolder):
     
     ### START TRAINING ###
     
-    run_name = args.run_name
-    # dataset = args.dataset
-    rho = args.rho
-    nh = args.nh
+    # run_name = args.run_name
+    # # dataset = args.dataset
+    # rho = args.rho
+    # nh = args.nh
 
-    epochs = args.epochs
-    learning_rate = args.learning_rate
-    nIterEp = args.iters_per_epoch
-    sched_start_epoch = args.sched_start_epoch
-    optimizer = args.optimizer
+    # epochs = args.epochs
+    # learning_rate = args.learning_rate
+    # nIterEp = args.iters_per_epoch
+    # sched_start_epoch = args.sched_start_epoch
+    # optimizer = args.optimizer
     global DROPOUT
-    DROPOUT = args.dropout
-    batch_size = args.batch_size
-    test_epoch = args.test_epoch
-    satellites = args.satellites
+    DROPOUT = 0
+    # batch_size = args.batch_size
+    # test_epoch = args.test_epoch
+    # satellites = args.satellites
 
-    if not args.testing:
-        wandb.init(dir=os.path.join(kPath.dirVeg))
-        wandb.run.name = run_name
+    # if not args.testing:
+    #     wandb.init(dir=os.path.join(kPath.dirVeg))
+    #     wandb.run.name = run_name
         
-    dataName = args.dataset
+    model_dir_path = os.path.join(kPath.dirVeg, 'runs', args.model_dir)
+    hyperparameters_path = os.path.join(model_dir_path, 'hyperparameters.json')
+
+    with open(hyperparameters_path, 'r') as j:
+        hyperparameters = json.loads(j.read())
+        dataset = hyperparameters['dataset']
+        satellites = hyperparameters['satellites']
+        nh = hyperparameters['nh']
+        rho = hyperparameters['rho']
+        
+    dataName = dataset
     importlib.reload(hydroDL.data.dbVeg)
     df = dbVeg.DataFrameVeg(dataName)
     dm = DataModel(X=df.x, XC=df.xc, Y=df.y)
@@ -557,7 +566,7 @@ def train(args, saveFolder):
     bL = 6
     bM = 10
 
-    xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train', batch=batch_size, sample=args.sample)
+    xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train')
 
     nTup, lTup = (), ()
     if satellites == "no_landsat":
@@ -570,154 +579,121 @@ def train(args, saveFolder):
     
     nxc = xc.shape[-1]
     model = FinalModel(nTup, nxc, nh)
+    model_weights_path = os.path.join(model_dir_path, 'best_model.pth')
+    model.load_state_dict(torch.load(model_weights_path))
     loss_fn = nn.L1Loss(reduction='mean')
 
-    if optimizer == "adam":
-        optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    else:
-        optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+    # if optimizer == "adam":
+    #     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    # else:
+    #     optimizer = optim.SGD(model.parameters(), lr=learning_rate)
         
-    scheduler = lr_scheduler.LinearLR(
-        optimizer, start_factor=1.0, end_factor=0.01, total_iters=800
-    )
+    # scheduler = lr_scheduler.LinearLR(
+    #     optimizer, start_factor=1.0, end_factor=0.01, total_iters=800
+    # )
     
     model.train()
-    for ep in range(epochs):
+    for ep in range(1):
         lossEp = 0
         metrics = {"train_loss" : 0, "train_RMSE" : 0, "train_rsq" : 0, "train_Rsq" : 0}
-        for i in range(nIterEp):
-            t0 = time.time()
-            xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train', batch=batch_size, sample=args.sample)
-            t1 = time.time()
-            model.zero_grad()
+        # for i in range(nIterEp):
+            # t0 = time.time()
+            # xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train', batch=batch_size, sample=args.sample)
+            # t1 = time.time()
+            # model.zero_grad()
 
-            xTup, pTup = (), ()
-            if satellites == "no_landsat":
-                xTup = (xS, xM)
-                pTup = (pS, pM)
-            else:
-                xTup = (xS, xL, xM)
-                pTup = (pS, pL, pM)
+            # xTup, pTup = (), ()
+            # if satellites == "no_landsat":
+            #     xTup = (xS, xM)
+            #     pTup = (pS, pM)
+            # else:
+            #     xTup = (xS, xL, xM)
+            #     pTup = (pS, pL, pM)
             
-            yP = model(xTup, pTup, xcT, lTup)      
-            loss = loss_fn(yP, yT)
-            loss.backward()
-            t2 = time.time()
-            lossEp = lossEp + loss.item()
-            optimizer.step()
+            # yP = model(xTup, pTup, xcT, lTup)      
+            # loss = loss_fn(yP, yT)
+            # loss.backward()
+            # t2 = time.time()
+            # lossEp = lossEp + loss.item()
+            # optimizer.step()
     
-            metrics["train_loss"] += loss.item()
-            with torch.no_grad():
-                obs, pred = yP.detach().numpy(), yT.detach().numpy()
-                rmse = np.sqrt(np.mean((obs - pred) ** 2))
-                corrcoef = np.corrcoef(obs, pred)[0, 1]
-                coef_det = r2_score(obs, pred)
-                metrics["train_RMSE"]+= rmse
-                metrics["train_rsq"] += corrcoef
-                metrics["train_Rsq"] += coef_det
+            # metrics["train_loss"] += loss.item()
+            # with torch.no_grad():
+            #     obs, pred = yP.detach().numpy(), yT.detach().numpy()
+            #     rmse = np.sqrt(np.mean((obs - pred) ** 2))
+            #     corrcoef = np.corrcoef(obs, pred)[0, 1]
+            #     coef_det = r2_score(obs, pred)
+            #     metrics["train_RMSE"]+= rmse
+            #     metrics["train_rsq"] += corrcoef
+            #     metrics["train_Rsq"] += coef_det
     
-        metrics = {metric : sum / nIterEp for metric, sum in metrics.items()}
+        # metrics = {metric : sum / nIterEp for metric, sum in metrics.items()}
         
-        optimizer.zero_grad()
-        xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='test', batch=1000, sample=args.sample)
+        # optimizer.zero_grad()
+        # xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='test', batch=1000, sample=args.sample)
 
-        xTup, pTup = (), ()
-        if satellites == "no_landsat":
-            xTup = (xS, xM)
-            pTup = (pS, pM)
-        else:
-            xTup = (xS, xL, xM)
-            pTup = (pS, pL, pM)
+        # xTup, pTup = (), ()
+        # if satellites == "no_landsat":
+        #     xTup = (xS, xM)
+        #     pTup = (pS, pM)
+        # else:
+        #     xTup = (xS, xL, xM)
+        #     pTup = (pS, pL, pM)
         
-        yP = model(xTup, pTup, xcT, lTup)
-        loss = loss_fn(yP, yT)
+        # yP = model(xTup, pTup, xcT, lTup)
+        # loss = loss_fn(yP, yT)
     
-        metrics["test_loss"] = loss_fn(yP, yT).item()
-        obs, pred = yP.detach().numpy(), yT.detach().numpy()
-        rmse = np.sqrt(np.mean((obs - pred) ** 2))
-        corrcoef = np.corrcoef(obs, pred)[0, 1]
-        coef_det = r2_score(obs, pred)
-        with torch.no_grad():
-            metrics["test_RMSE"]= rmse
-            metrics["test_rsq"] = corrcoef
-            metrics["test_Rsq"] = coef_det
+        # metrics["test_loss"] = loss_fn(yP, yT).item()
+        # obs, pred = yP.detach().numpy(), yT.detach().numpy()
+        # rmse = np.sqrt(np.mean((obs - pred) ** 2))
+        # corrcoef = np.corrcoef(obs, pred)[0, 1]
+        # coef_det = r2_score(obs, pred)
+        # with torch.no_grad():
+        #     metrics["test_RMSE"]= rmse
+        #     metrics["test_rsq"] = corrcoef
+        #     metrics["test_Rsq"] = coef_det
         
-        if ep > sched_start_epoch:
-            scheduler.step()
-        print(
-            '{} {:.3f} {:.3f} {:.3f} time {:.2f} {:.2f}'.format(
-                ep, lossEp / nIterEp, loss.item(), corrcoef, t1 - t0, t2 - t1
-            )
-        )
+        # if ep > sched_start_epoch:
+        #     scheduler.step()
+        # print(
+        #     '{} {:.3f} {:.3f} {:.3f} time {:.2f} {:.2f}'.format(
+        #         ep, lossEp / nIterEp, loss.item(), corrcoef, t1 - t0, t2 - t1
+        #     )
+        # )
 
-        if ep > 0 and ep % test_epoch == 0:
-            test(df, testInd, testIndBelow, ep, metrics)
+        # if ep > 0 and ep % test_epoch == 0:
+        test(df, testInd, testIndBelow, ep, metrics)
 
-        if not args.testing:
-            wandb.log(metrics)
+        # if not args.testing:
+        #     wandb.log(metrics)
 
-    metrics_path = os.path.join(saveFolder, 'metrics.csv')
-    metrics = pd.read_csv(metrics_path)
+    # metrics_path = os.path.join(saveFolder, 'metrics.csv')
+    # metrics = pd.read_csv(metrics_path)
 
-    best_metrics = metrics[metrics.qual_obs_coefdet == max(metrics.qual_obs_coefdet)]
-    best_metrics['run_name'] = [run_name]
-    best_metrics = best_metrics[['run_name'] + [x for x in best_metrics.columns if x != 'run_name']]
+    # best_metrics = metrics[metrics.qual_obs_coefdet == max(metrics.qual_obs_coefdet)]
+    # best_metrics['run_name'] = [run_name]
+    # best_metrics = best_metrics[['run_name'] + [x for x in best_metrics.columns if x != 'run_name']]
     
-    old_best_model_path = os.path.join(saveFolder, f'model_ep{int(best_metrics.iloc[0].epoch)}.pth')
-    new_best_model_path = os.path.join(saveFolder, 'best_model.pth')
-    shutil.copyfile(old_best_model_path, new_best_model_path)
+    # old_best_model_path = os.path.join(saveFolder, f'model_ep{int(best_metrics.iloc[0].epoch)}.pth')
+    # new_best_model_path = os.path.join(saveFolder, 'best_model.pth')
+    # shutil.copyfile(old_best_model_path, new_best_model_path)
 
-    all_metrics_path = os.path.join(kPath.dirVeg, 'runs', 'best_metrics_all_runs.csv')
-    if os.path.exists(all_metrics_path):
-        all_metrics = pd.read_csv(all_metrics_path)
-        all_metrics = pd.concat([all_metrics, best_metrics])
-        all_metrics.to_csv(all_metrics_path, index=False)
-    else:
-        best_metrics.to_csv(all_metrics_path, index=False)
+    # all_metrics_path = os.path.join(kPath.dirVeg, 'runs', 'best_metrics_all_runs.csv')
+    # if os.path.exists(all_metrics_path):
+    #     all_metrics = pd.read_csv(all_metrics_path)
+    #     all_metrics = pd.concat([all_metrics, best_metrics])
+    #     all_metrics.to_csv(all_metrics_path, index=False)
+    # else:
+    #     best_metrics.to_csv(all_metrics_path, index=False)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train model")
     # admin
-    parser.add_argument("--run_name", type=str, required=True)
-    parser.add_argument("--testing", type=bool, default=False)
-    parser.add_argument("--cross_val", type=bool, default=False)
-    parser.add_argument("--weights_path", type=str, default="")
     parser.add_argument("--device", type=int, default=-1)
-    # dataset 
-    parser.add_argument("--dataset", type=str, default="singleDaily-nadgrid",
-                        choices=["singleDaily", "singleDaily-modisgrid", "singleDaily-nadgrid"])
-    parser.add_argument("--rho", type=int, default=45)
-    parser.add_argument("--satellites", type=str, default="all")
-    # model
-    parser.add_argument("--nh", type=int, default=32)
-    parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "sgd"])
-    parser.add_argument("--dropout", type=float, default=0.1)
-    # training
-    parser.add_argument("--batch_size", type=int, default=1000)
-    parser.add_argument("--epochs", type=int, default=1000)
-    parser.add_argument("--learning_rate", type=float, default=1e-2)
-    parser.add_argument("--iters_per_epoch", type=int, default=20)
-    parser.add_argument("--sched_start_epoch", type=int, default=200)
-    parser.add_argument("--test_epoch", type=int, default=50)
-    parser.add_argument("--sample", type=bool, default=False)
+    parser.add_argument("--model_dir", type=str)
+    # save
+    parser.add_argument("--save_folder", type=str, default=kPath.dirVeg)
     args = parser.parse_args()
-    
-    # create save dir / save hyperparameters
-    saveFolder = ""
-    if not args.testing:
-        saveFolder = os.path.join(kPath.dirVeg, 'runs', f"{args.run_name}")
-        
-        if not os.path.exists(saveFolder):
-            os.mkdir(saveFolder)
-        else:
-            raise Exception("Run already exists!")
-    
-        json_fname = os.path.join(saveFolder, "hyperparameters.json")
-        with open(json_fname, 'w') as f:
-            tosave = vars(args)
-            json.dump(tosave, f, indent=4)
 
-    train(args, saveFolder)
-
-
+    train(args)
