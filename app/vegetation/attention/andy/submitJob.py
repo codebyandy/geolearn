@@ -56,7 +56,7 @@ nh_lst = [64, 128, 256]
 
 for dropout in dropout_lst:
     for nh in nh_lst:
-        run_name = f'cherry_pick_do_{dropout}_nh_{nh}'
+        run_name = f'cherry_do_{dropout}_nh_{nh}'
         train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/train.py'
         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh} --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat'
         submitJob(run_name, cmd_line)
