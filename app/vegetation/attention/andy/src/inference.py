@@ -205,9 +205,8 @@ def main(args):
     
     model_weights_path = os.path.join(model_dir_path, 'best_model.pth')
     if not os.path.exists(model_weights_path): 
-        save_best_model(model_weights_path)
+        save_best_model(model_dir_path)
         model_weights_path = os.path.join(model_dir_path, 'best_model_so_far.pth')
-        
     model.load_state_dict(torch.load(model_weights_path))
 
     config = {"model" : model, "satellites" : satellites, "epoch" : None}

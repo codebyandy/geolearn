@@ -54,12 +54,12 @@ def submitJobGPU(jobName, cmdLine, nH=8, nM=16):
 dropout_lst = [0.2, 0.4, 0.6]
 nh_lst = [24, 32, 64, 128, 256]
 
-# for dropout in dropout_lst:
-#     for nh in nh_lst:
-#         run_name = f'cherry_pick_do_{dropout}_nh_{nh}'
-#         train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/train.py'
-#         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh} --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat'
-#         submitJob(run_name, cmd_line)
+for dropout in dropout_lst:
+    for nh in nh_lst:
+        run_name = f'500m_no_landsat_do_{dropout}_nh_{nh}'
+        train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/train.py'
+        cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh} --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat'
+        submitJob(run_name, cmd_line)
 
 # for dropout in dropout_lst:
 #     for nh in nh_lst:
@@ -68,16 +68,18 @@ nh_lst = [24, 32, 64, 128, 256]
 #         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh} --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat --test_epoch 10'
 #         submitJob(run_name, cmd_line, nH=24)
 
-for dropout in dropout_lst:
-    for nh in nh_lst:
-        run_name = f'500m_no_landsat_do_{dropout}_nh_{nh}'
-        train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/inference.py'
-        cmd_line = f'python {train_path} --model_dir {run_name}'
-        submitJob(run_name, cmd_line, nH=1)
+# INFERENCE
 
-for dropout in dropout_lst:
-    for nh in nh_lst:
-        run_name = f'all_pick_do_{dropout}_nh_{nh}'
-        train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/inference_all_pick.py'
-        cmd_line = f'python {train_path} --model_dir {run_name}'
-        submitJob(run_name, cmd_line, nH=1)
+# for dropout in dropout_lst:
+#     for nh in nh_lst:
+#         run_name = f'500m_no_landsat_do_{dropout}_nh_{nh}'
+#         train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/inference.py'
+#         cmd_line = f'python {train_path} --model_dir {run_name}'
+#         submitJob(run_name, cmd_line, nH=1)
+
+# for dropout in dropout_lst:
+#     for nh in nh_lst:
+#         run_name = f'all_pick_do_{dropout}_nh_{nh}'
+#         train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/inference_all_pick.py'
+#         cmd_line = f'python {train_path} --model_dir {run_name}'
+#         submitJob(run_name, cmd_line, nH=1)
