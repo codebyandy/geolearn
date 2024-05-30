@@ -7,6 +7,7 @@ import torch
 from sklearn.metrics import r2_score
 import pandas as pd
 import argparse
+import shutil
 
 from model import FinalModel
 from data import randomSubset, prepare_data
@@ -152,6 +153,15 @@ def train_metrics(data, split_indices, config):
     return metrics
 
 
+def save_best_model(model_weights_path):
+    metrics_path = os.path.join(model_weights_path, 'metrics.csv')
+    metrics = pd.read_csv(metrics_path)
+    best_metrics = metrics[metrics.qual_obs_coefdet == max(metrics.qual_obs_coefdet)]
+    old_best_model_path = os.path.join(model_weights_path, f'model_ep{int(best_metrics.iloc[0].epoch)}.pth')
+    new_best_model_path = os.path.join(model_weights_path, 'best_model_so_far.pth')
+    shutil.copyfile(old_best_model_path, new_best_model_path)
+
+
 def main(args):        
     model_dir_path = os.path.join(kPath.dirVeg, 'runs', args.model_dir)
     hyperparameters_path = os.path.join(model_dir_path, 'hyperparameters.json')
@@ -194,6 +204,10 @@ def main(args):
     model = FinalModel(nTup, nxc, nh, 0)
     
     model_weights_path = os.path.join(model_dir_path, 'best_model.pth')
+    if not os.path.exists(model_weights_path): 
+        save_best_model(model_weights_path)
+        model_weights_path = os.path.join(model_dir_path, 'best_model_so_far.pth')
+        
     model.load_state_dict(torch.load(model_weights_path))
 
     config = {"model" : model, "satellites" : satellites, "epoch" : None}
