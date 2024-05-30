@@ -251,7 +251,6 @@ def train(args, saveFolder):
         tempS = jInd[testInd]
         tempT = iInd[testInd]
         testSite = np.unique(tempS)
-        pdb.set_trace()
         siteLst = list()
         matResult = np.ndarray([len(testSite), 3])
         for i, k in enumerate(testSite):
