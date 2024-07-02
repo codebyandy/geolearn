@@ -8,8 +8,8 @@ from sklearn.metrics import r2_score
 import pandas as pd
 import argparse
 
-from model_all_pick import FinalModel
-from data_all_pick import randomSubset, prepare_data
+from model import FinalModel
+from data import randomSubset, prepare_data
 import shutil
 
 import pdb
@@ -121,7 +121,6 @@ def get_metrics(data, indices, config):
 
     
     # anomoly
-
     aLst, bLst = list(), list()
     
     for site in siteLst:
@@ -152,7 +151,7 @@ def test_metrics(data, split_indices, config):
     metrics.update({f"qual_anomaly_{metric_names[i]}" : [anomaly_quality[i]] for i in range(3)})
     metrics.update({f"poor_obs_{metric_names[i]}" : [obs_poor[i]] for i in range(3)})
     metrics.update({f"poor_site_{metric_names[i]}" : [site_poor[i]] for i in range(3)})
-    metrics.update({f"poor_anomaly_{metric_names[i]}" :[anomaly_poor[i]] for i in range(3)})
+    metrics.update({f"poor_anomaly_{metric_names[i]}" : [anomaly_poor[i]] for i in range(3)})
 
     return metrics
 
@@ -180,21 +179,12 @@ def save_best_model(model_weights_path):
     shutil.copyfile(old_best_model_path, new_best_model_path)
 
 
-def main(args):        
-    model_dir_path = os.path.join(kPath.dirVeg, 'runs', args.model_dir)
-    hyperparameters_path = os.path.join(model_dir_path, 'hyperparameters.json')
-
-    with open(hyperparameters_path, 'r') as j:
-        hyperparameters = json.loads(j.read())
-        dataset = hyperparameters['dataset']
-        satellites = hyperparameters['satellites']
-        nh = hyperparameters['nh']
-        rho = hyperparameters['rho']
-
+def main(args):      
+    # Load data
     data = prepare_data(dataset, rho)
     df, dm, iInd, jInd, nMat, pSLst, pLLst, pMLst, x, rho, xc, yc = data
     
-    # get pre-created data splits
+    # Load pre-created data splits
     dataFolder = os.path.join(kPath.dirVeg, 'model', 'attention', 'dataset')
     subsetFile = os.path.join(dataFolder, 'subset.json')
 
@@ -207,6 +197,18 @@ def main(args):
     split_indices["test_quality"] = dictSubset['testInd_k05']
     split_indices["test_poor"] = dictSubset['testInd_underThresh']
 
+    # Get pre-trained weights / hyperperameters
+    model_dir_path = os.path.join(kPath.dirVeg, 'runs', args.model_dir)
+    hyperparameters_path = os.path.join(model_dir_path, 'hyperparameters.json')
+
+    with open(hyperparameters_path, 'r') as j:
+        hyperparameters = json.loads(j.read())
+        dataset = hyperparameters['dataset']
+        satellites = hyperparameters['satellites']
+        nh = hyperparameters['nh']
+        rho = hyperparameters['rho']
+
+    # Set up model
     xS, xL, xM, xc, yc, mask  = randomSubset(data, split_indices["train"], split_indices["test_quality"], opt='train')
 
     nTup, lTup = (), ()
@@ -221,17 +223,20 @@ def main(args):
     nxc = xc.shape[-1]
     model = FinalModel(nTup, nxc, nh, 0)
     
+    # Load pre-trained weights into model
     model_weights_path = os.path.join(model_dir_path, 'best_model.pth')
-    if not os.path.exists(model_weights_path): 
+    if not os.path.exists(model_weights_path): # if model did not finish training
         save_best_model(model_dir_path)
         model_weights_path = os.path.join(model_dir_path, 'best_model_so_far.pth')
     model.load_state_dict(torch.load(model_weights_path))
 
+    # Get train / test metrics
     config = {"model" : model, "satellites" : satellites, "epoch" : None}
     metrics = {'model' : args.model_dir}
     metrics.update(test_metrics(data, split_indices, config))
     metrics.update(train_metrics(data, split_indices, config))
 
+    # Save metrics to spreadsheet with runs / metrics
     metrics = pd.DataFrame(metrics)
     all_metrics_path = os.path.join(args.save_folder, 'inference.csv')
     if os.path.exists(all_metrics_path):
@@ -244,10 +249,10 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train model")
-    # admin
+
     parser.add_argument("--device", type=int, default=-1)
     parser.add_argument("--model_dir", type=str)
-    # save
+
     parser.add_argument("--save_folder", type=str, default=kPath.dirVeg)
     args = parser.parse_args()
 

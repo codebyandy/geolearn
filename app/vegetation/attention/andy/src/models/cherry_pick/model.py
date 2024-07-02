@@ -1,3 +1,6 @@
+"""
+This file includes the transformer model class and its component classes.
+"""
 
 from torch import nn
 import torch
@@ -5,7 +8,19 @@ import math
 
 
 class InputFeature(nn.Module):
+    """
+    Called in FinalModel class. For each remote sensing source, takes the input features
+    and converts them to embedding representations (w/ positional encoding).
+    """
     def __init__(self, nTup, nxc, nh):
+        """
+        Set up an MLP for each remote sensing source and 1 MLP for the constant variables.
+
+        Args:
+            nTup (list[int]): Number of input features for each remote sensing source (i.e. Sentinel, Modis) 
+            nxc (int): Number of constant variables
+            nh (int): Size of embedding space
+        """
         super().__init__()
         self.nh = nh
         self.lnXc = nn.Sequential(nn.Linear(nxc, nh), nn.ReLU(), nn.Linear(nh, nh))
@@ -43,7 +58,6 @@ class AttentionLayer(nn.Module):
         self.W_o = nn.Linear(nh, nh, bias=False)
 
     def forward(self, x):
-        # pdb.set_trace()
         q, k, v = self.W_q(x), self.W_k(x), self.W_v(x)
         d = q.shape[1]
         score = torch.bmm(q, k.transpose(1, 2)) / math.sqrt(d)
@@ -77,6 +91,12 @@ class AddNorm(nn.Module):
 
 class FinalModel(nn.Module):
     def __init__(self, nTup, nxc, nh, dropout):
+        """
+        Args:
+            nTup (list[int]): Number of input features for each remote sensing source (i.e. Sentinel, Modis) 
+            nxc (int): Number of constant variables
+            nh (int): Size of embedding space
+        """
         super().__init__()
         self.nTup = nTup
         self.nxc = nxc
@@ -91,6 +111,15 @@ class FinalModel(nn.Module):
                 nn.init.xavier_uniform_(p)
 
     def forward(self, x, pos, xcT, lTup):
+        """
+        Args:
+            x (tuple[tensor]): remote sensing data, 1 tensor for each source (i.e. Sentinel, Modis),
+                tensors of shape (batch size x days x input features)
+            pos (tuple[tensor]): corresponds with `x` argument, position of day within window,
+                1 tensor for each source, tensors of shape (batch size x days)
+            xcT (tensor): constant variables, tensor of shape (batch size x number of constant variables)
+            lTup (tuple[int]): number of sampled days for each remote sensing source
+        """
         xIn = self.encoder(x, pos, xcT)
         out = self.atten(xIn)
         out = self.addnorm1(xIn, out)
@@ -98,6 +127,10 @@ class FinalModel(nn.Module):
         out = self.addnorm2(xIn, out)
         out = self.ffn2(out)
         out = out.squeeze(-1)
+
+        # Final aggregation: 
+        # 1. Take mean of the proto-prediction from same remote sensing source
+        # 2. Sum the means
         k = 0
         temp = 0
         for i in lTup:

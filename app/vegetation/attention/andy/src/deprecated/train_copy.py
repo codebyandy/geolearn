@@ -1,38 +1,52 @@
-
-import hydroDL.data.dbVeg
 from hydroDL.data import dbVeg
-import importlib
-import numpy as np
-import json
-import os
-import matplotlib.pyplot as plt
-import torch
-from torch import nn
 from hydroDL.data import DataModel
-from hydroDL.master import  dataTs2Range
-import torch.optim as optim
+from hydroDL.master import dataTs2Range
 from hydroDL import kPath
+
 import torch.optim.lr_scheduler as lr_scheduler
+import torch.optim as optim
+from torch import nn
+import torch
+
+import numpy as np
+import pandas as pd
+import math
+
+import matplotlib.pyplot as plt
 from sklearn.metrics import r2_score
 import wandb
 import time
-import pandas as pd
+
+import json
+import os
 import argparse
 import shutil
-
-
-
-
-from torch import nn
-import torch
-import math
+import random
 
 import pdb
 
 
+seed = 42
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed(seed)
+
 
 class InputFeature(nn.Module):
+    """
+    Called in FinalModel class. For each remote sensing source, takes the input features
+    and converts them to embedding representations (w/ positional encoding).
+    """
     def __init__(self, nTup, nxc, nh):
+        """
+        Set up an MLP for each remote sensing source and 1 MLP for the constant variables.
+
+        Args:
+            nTup (list[int]): Number of input features for each remote sensing source (i.e. Sentinel, Modis) 
+            nxc (int): Number of constant variables
+            nh (int): Size of embedding space
+        """
         super().__init__()
         self.nh = nh
         self.lnXc = nn.Sequential(nn.Linear(nxc, nh), nn.ReLU(), nn.Linear(nh, nh))
@@ -70,7 +84,6 @@ class AttentionLayer(nn.Module):
         self.W_o = nn.Linear(nh, nh, bias=False)
 
     def forward(self, x):
-        # pdb.set_trace()
         q, k, v = self.W_q(x), self.W_k(x), self.W_v(x)
         d = q.shape[1]
         score = torch.bmm(q, k.transpose(1, 2)) / math.sqrt(d)
@@ -104,6 +117,12 @@ class AddNorm(nn.Module):
 
 class FinalModel(nn.Module):
     def __init__(self, nTup, nxc, nh):
+        """
+        Args:
+            nTup (list[int]): Number of input features for each remote sensing source (i.e. Sentinel, Modis) 
+            nxc (int): Number of constant variables
+            nh (int): Size of embedding space
+        """
         super().__init__()
         self.nTup = nTup
         self.nxc = nxc
@@ -118,6 +137,15 @@ class FinalModel(nn.Module):
                 nn.init.xavier_uniform_(p)
 
     def forward(self, x, pos, xcT, lTup):
+        """
+        Args:
+            x (tuple[tensor]): remote sensing data, 1 tensor for each source (i.e. Sentinel, Modis),
+                tensors of shape (batch size x days x input features)
+            pos (tuple[tensor]): corresponds with `x` argument, position of day within window,
+                1 tensor for each source, tensors of shape (batch size x days)
+            xcT (tensor): constant variables, tensor of shape (batch size x number of constant variables)
+            lTup (tuple[int]): number of sampled days for each remote sensing source
+        """
         xIn = self.encoder(x, pos, xcT)
         out = self.atten(xIn)
         out = self.addnorm1(xIn, out)
@@ -125,6 +153,10 @@ class FinalModel(nn.Module):
         out = self.addnorm2(xIn, out)
         out = self.ffn2(out)
         out = out.squeeze(-1)
+
+        # Final aggregation: 
+        # 1. Take mean of the proto-prediction from same remote sensing source
+        # 2. Sum the means
         k = 0
         temp = 0
         for i in lTup:
@@ -136,13 +168,13 @@ class FinalModel(nn.Module):
 
 
 def train(args, saveFolder):
-    def randomSubset(opt='train', batch=1000, sample=False):
-        # random sample within window
+    def randomSubset(opt='train', batch=1000):
+        """
+        Randomly select `batch` number of observations for training. For each observation,
+        randomly sample (cherry-pick) a set number of days from each remote sensing source.
+        """
         varS = ['VV', 'VH', 'vh_vv']
         varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
-        # varM = ["mod_b{}".format(x) for x in range(1, 8)]
-        # varM = ["myd_b{}".format(x) for x in range(1, 8)]
-        # varM = ['Fpar', 'Lai']
         varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
         if opt == 'train':
             indSel = np.random.permutation(trainInd)[0:batch]
@@ -189,9 +221,6 @@ def train(args, saveFolder):
         model.eval()
         varS = ['VV', 'VH', 'vh_vv']
         varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
-        # varM = ["mod_b{}".format(x) for x in range(1, 8)]
-        # varM = ["myd_b{}".format(x) for x in range(1, 8)]
-        # varM = ['Fpar', 'Lai']
         varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
         iS = [df.varX.index(var) for var in varS]
         iL = [df.varX.index(var) for var in varL]
@@ -472,41 +501,39 @@ def train(args, saveFolder):
     batch_size = args.batch_size
     test_epoch = args.test_epoch
     satellites = args.satellites
+    dataName = args.dataset
 
+    # Do not log run if just a test
     if not args.testing:
         wandb.init(dir=os.path.join(kPath.dirVeg))
         wandb.run.name = run_name
-        
-    dataName = args.dataset
-    importlib.reload(hydroDL.data.dbVeg)
+    
+    # Load data with custom DataFrameVeg and DataModel classes
     df = dbVeg.DataFrameVeg(dataName)
     dm = DataModel(X=df.x, XC=df.xc, Y=df.y)
-    siteIdLst = df.siteIdLst
-    dm.trans(mtdDefault='minmax')
+    dm.trans(mtdDefault='minmax') # Min-max normalization
     dataTup = dm.getData()
-    dataEnd, (iInd, jInd) = dataTs2Range(dataTup, rho, returnInd=True)
-    x, xc, y, yc = dataEnd
+    siteIdLst = df.siteIdLst
+
+    # To convert data to shape (Number of observations, rho, number of input features)
+    dataEnd, (iInd, jInd) = dataTs2Range(dataTup, rho, returnInd=True) # iInd: day, jInd: site
+    x, xc, _, yc = dataEnd 
+   
+    iInd = np.array(iInd) # TODO: Temporary fix
+    jInd = np.array(jInd) # TODO: emporary fix
     
-    iInd = np.array(iInd)
-    jInd = np.array(jInd)
-    
-    # np.nanmean(dm.x[:, :, 0])
-    # np.nanmax(df.x[:, :, 2])
-    
-    # calculate position
     varS = ['VV', 'VH', 'vh_vv']
     varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
-    # varM = ["mod_b{}".format(x) for x in range(1, 8)]
-    # varM = ["myd_b{}".format(x) for x in range(1, 8)]
-    # varM = ['Fpar', 'Lai']
     varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
 
     iS = [df.varX.index(var) for var in varS]
     iL = [df.varX.index(var) for var in varL]
     iM = [df.varX.index(var) for var in varM]
     
+    # For each remote sensing source (i.e. Sentinel, MODIS), for each LFMC observaton,
+    # create a list of days in the rho-window that have data 
+    # nMat: Number of days each satellite has data for, of shape (# obsevations, # satellites)
     pSLst, pLLst, pMLst = list(), list(), list()
-    ns = yc.shape[0]
     nMat = np.zeros([yc.shape[0], 3])
     for k in range(nMat.shape[0]):
         tempS = x[:, k, iS]
@@ -520,9 +547,7 @@ def train(args, saveFolder):
         pMLst.append(pM)
         nMat[k, :] = [len(pS), len(pL), len(pM)]
     
-    np.where(nMat == 0)
-    np.sum((np.where(nMat == 0)[1]) == 0)
-    
+    # only keep if data if there is at least 1 day of data for each remote sensing source
     indKeep = np.where((nMat > 0).all(axis=1))[0]
     x = x[:, indKeep, :]
     xc = xc[indKeep, :]
@@ -535,12 +560,7 @@ def train(args, saveFolder):
     jInd = jInd[indKeep]
     siteIdLst = [siteIdLst[k] for k in jInd]
     
-    # split train and test
-    jSite, count = np.unique(jInd, return_counts=True)
-    countAry = np.array([[x, y] for y, x in sorted(zip(count, jSite))])
-    
-  
-    # save data
+    # Load previously generated dataet splits
     dataFolder = os.path.join(kPath.dirVeg, 'model', 'attention', 'dataset')
     subsetFile = os.path.join(dataFolder, 'subset.json')
 
@@ -556,8 +576,12 @@ def train(args, saveFolder):
     bL = 6
     bM = 10
 
-    xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train', batch=batch_size, sample=args.sample)
+    # Get a random subset to get important shapes
+    # TODO: make this cleaner?
+    xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train', batch=batch_size)
 
+    # nTup (list[int]): Number of input features for each remote sensing source (i.e. Sentinel, Modis) 
+    # lTup (tuple[int]): number of sampled days for each remote sensing source
     nTup, lTup = (), ()
     if satellites == "no_landsat":
         print("no landsat model")
@@ -567,6 +591,7 @@ def train(args, saveFolder):
         nTup = (xS.shape[-1], xL.shape[-1], xM.shape[-1])
         lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
     
+    # nxc (int): Number of constant variables
     nxc = xc.shape[-1]
     model = FinalModel(nTup, nxc, nh)
     loss_fn = nn.L1Loss(reduction='mean')
@@ -581,15 +606,17 @@ def train(args, saveFolder):
     )
     
     model.train()
+
     for ep in range(epochs):
+        
         lossEp = 0
         metrics = {"train_loss" : 0, "train_RMSE" : 0, "train_rsq" : 0, "train_Rsq" : 0}
+        
         for i in range(nIterEp):
-            t0 = time.time()
-            xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train', batch=batch_size, sample=args.sample)
-            t1 = time.time()
             model.zero_grad()
-
+            
+            xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='train', batch=batch_size)
+        
             xTup, pTup = (), ()
             if satellites == "no_landsat":
                 xTup = (xS, xM)
@@ -601,12 +628,14 @@ def train(args, saveFolder):
             yP = model(xTup, pTup, xcT, lTup)      
             loss = loss_fn(yP, yT)
             loss.backward()
-            t2 = time.time()
-            lossEp = lossEp + loss.item()
+      
+            lossEp += loss.item()
             optimizer.step()
     
             metrics["train_loss"] += loss.item()
+            
             with torch.no_grad():
+                # TODO: update this to be modularized
                 obs, pred = yP.detach().numpy(), yT.detach().numpy()
                 rmse = np.sqrt(np.mean((obs - pred) ** 2))
                 corrcoef = np.corrcoef(obs, pred)[0, 1]
@@ -618,7 +647,8 @@ def train(args, saveFolder):
         metrics = {metric : sum / nIterEp for metric, sum in metrics.items()}
         
         optimizer.zero_grad()
-        xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='test', batch=1000, sample=args.sample)
+
+        xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(opt='test', batch=1000)
 
         xTup, pTup = (), ()
         if satellites == "no_landsat":
@@ -631,6 +661,7 @@ def train(args, saveFolder):
         yP = model(xTup, pTup, xcT, lTup)
         loss = loss_fn(yP, yT)
     
+        # TODO: update this to be modularized
         metrics["test_loss"] = loss_fn(yP, yT).item()
         obs, pred = yP.detach().numpy(), yT.detach().numpy()
         rmse = np.sqrt(np.mean((obs - pred) ** 2))
@@ -644,8 +675,8 @@ def train(args, saveFolder):
         if ep > sched_start_epoch:
             scheduler.step()
         print(
-            '{} {:.3f} {:.3f} {:.3f} time {:.2f} {:.2f}'.format(
-                ep, lossEp / nIterEp, loss.item(), corrcoef, t1 - t0, t2 - t1
+            '{} {:.3f} {:.3f} {:.3f}'.format(
+                ep, lossEp / nIterEp, loss.item(), corrcoef
             )
         )
 
@@ -655,6 +686,7 @@ def train(args, saveFolder):
         if not args.testing:
             wandb.log(metrics)
 
+    # Determine best performing epoch
     metrics_path = os.path.join(saveFolder, 'metrics.csv')
     metrics = pd.read_csv(metrics_path)
 
@@ -662,10 +694,12 @@ def train(args, saveFolder):
     best_metrics['run_name'] = [run_name]
     best_metrics = best_metrics[['run_name'] + [x for x in best_metrics.columns if x != 'run_name']]
     
+    # Save best performing model
     old_best_model_path = os.path.join(saveFolder, f'model_ep{int(best_metrics.iloc[0].epoch)}.pth')
     new_best_model_path = os.path.join(saveFolder, 'best_model.pth')
     shutil.copyfile(old_best_model_path, new_best_model_path)
 
+    # Update sheet containing all runs and best metrics
     all_metrics_path = os.path.join(kPath.dirVeg, 'runs', 'best_metrics_all_runs.csv')
     if os.path.exists(all_metrics_path):
         all_metrics = pd.read_csv(all_metrics_path)

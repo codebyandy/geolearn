@@ -18,7 +18,7 @@ bL = 6
 bM = 10
 
 
-def randomSubset(data, trainInd, testInd, opt='train', batch=1000):
+def randomSubset(data, trainInd, testInd, satellites, opt='train', batch=1000,):
     df, _, _, _, nMat, pSLst, pLLst, pMLst, x, rho, xc, yc = data
     
     # random sample within window
@@ -52,10 +52,10 @@ def randomSubset(data, trainInd, testInd, opt='train', batch=1000):
     xL[np.isnan(xL)] = 0
     xM[np.isnan(xM)] = 0
 
-    # if satellites == 'no_landsat':
-    mask = np.concatenate((maskS1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
-    # else: 
-    # mask = np.concatenate((maskS1, maskL1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+    if satellites == 'no_landsat':
+        mask = np.concatenate((maskS1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
+    else: 
+        mask = np.concatenate((maskS1, maskL1, maskM1, np.ones((maskS1.shape[0], 1))), axis=1)
     
     return (
         torch.tensor(xS, dtype=torch.float32),

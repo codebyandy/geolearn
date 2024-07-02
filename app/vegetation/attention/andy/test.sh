@@ -1,0 +1,2 @@
+python src/models/all_pick/train.py --run_name test_all --epochs 5 --iters_per_epoch 1 --test_epoch 1
+python src/models/cherry_pick/train.py --run_name test_cherry --epochs 5 --iters_per_epoch 1 --test_epoch 1

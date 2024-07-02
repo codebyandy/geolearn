@@ -1,8 +1,18 @@
-import os
 from hydroDL import kPath
+from itertools import product
+
+import argparse
+import os
 
 
-def submitJob(jobName, cmdLine, nH=8, nM=16):
+DEFAULT_METHODS = ["all", "cherry"]
+DEFAULT_SEEDS = [0, 1, 2]
+DEFAULT_DROPOUTS = [0.2, 0.4, 0.6]
+DEFAULT_EMBEDDING_SIZES = [32, 64, 128]
+DEFAULT_BATCH_SIZES = [500, 1000, 2000]
+
+
+def submitJob(jobName, cmdLine, nH=24, nM=16):
     jobFile = os.path.join(kPath.dirJob, jobName)
     with open(jobFile, 'w') as fh:
         fh.writelines("#!/bin/bash\n")
@@ -24,7 +34,7 @@ def submitJob(jobName, cmdLine, nH=8, nM=16):
     os.system('sbatch {}'.format(jobFile))
 
 
-def submitJobGPU(jobName, cmdLine, nH=8, nM=16):
+def submitJobGPU(jobName, cmdLine, nH=24, nM=16):
     jobFile = os.path.join(kPath.dirJob, jobName)
     with open(jobFile, 'w') as fh:
         fh.writelines("#!/bin/bash\n")
@@ -50,36 +60,34 @@ def submitJobGPU(jobName, cmdLine, nH=8, nM=16):
         fh.writelines(cmdLine)
     os.system('sbatch {}'.format(jobFile))
 
-    
-dropout_lst = [0.2, 0.4, 0.6]
-nh_lst = [64, 128, 256]
 
-for dropout in dropout_lst:
-    for nh in nh_lst:
-        run_name = f'cherry_do_{dropout}_nh_{nh}'
-        train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/train.py'
-        cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh} --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat'
-        submitJob(run_name, cmd_line)
+def main(args):
+    methods_lst = args.methods
+    seeds_lst = args.seeds
+    dropouts_lst = args.dropouts
+    embedding_sizes_lst = args.embedding_sizes
+    batch_sizes_lst = args.batch_sizes
 
-# for dropout in dropout_lst:
-#     for nh in nh_lst:
-#         run_name = f'all_pick_do_{dropout}_nh_{nh}'
-#         train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/train_no_sampling.py'
-#         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {nh} --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat --test_epoch 10'
-#         submitJob(run_name, cmd_line, nH=24)
+    hyperparam_combos = list(product(methods_lst, seeds_lst, dropouts_lst, embedding_sizes_lst, batch_sizes_lst))
 
-# INFERENCE
+    for method, seed, dropout, embedding_size, batch_size in hyperparam_combos:
+        print(method, seed, dropout, embedding_size)
+        run_name = f'{method}_{embedding_size}_{dropout}_{batch_size}'
+        train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
+        cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed} --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat'
+        if method == 'cherry':
+            cmd_line += ' --test_epoch 25'
+        print(cmd_line)
+        # submitJob(run_name, cmd_line)
 
-# for dropout in dropout_lst:
-#     for nh in nh_lst:
-#         run_name = f'500m_no_landsat_do_{dropout}_nh_{nh}'
-#         train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/inference.py'
-#         cmd_line = f'python {train_path} --model_dir {run_name}'
-#         submitJob(run_name, cmd_line, nH=1)
 
-# for dropout in dropout_lst:
-#     for nh in nh_lst:
-#         run_name = f'all_pick_do_{dropout}_nh_{nh}'
-#         train_path = '/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/inference_all_pick.py'
-#         cmd_line = f'python {train_path} --model_dir {run_name}'
-#         submitJob(run_name, cmd_line, nH=1)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train model")
+    parser.add_argument("--methods", type=list, default=DEFAULT_METHODS)
+    parser.add_argument("--seeds", type=list, default=DEFAULT_SEEDS)
+    parser.add_argument("--dropouts", type=list, default=DEFAULT_DROPOUTS)
+    parser.add_argument("--embedding_sizes", type=list, default=DEFAULT_EMBEDDING_SIZES)
+    parser.add_argument("--batch_sizes", type=list, default=DEFAULT_BATCH_SIZES)
+    args = parser.parse_args()
+
+    main(args)

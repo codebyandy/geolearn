@@ -1,3 +1,12 @@
+"""
+This file can get either train or test metrics given a transformer model.
+
+Usage:
+- Call the script with paths to a model to get train and test metrics.
+- Use `train_metrics` or `test_metrics` to get only those metrics.
+"""
+
+# hydroDl module by Kuai Fang
 from hydroDL import kPath
 
 import numpy as np
@@ -11,14 +20,9 @@ import shutil
 
 from model import FinalModel
 from data import randomSubset, prepare_data
+from utils import varS, varL, varM
 
 import pdb
-
-
-# satellite variable names
-varS = ['VV', 'VH', 'vh_vv']
-varL = ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'ndvi', 'ndwi', 'nirv']
-varM = ["MCD43A4_b{}".format(x) for x in range(1, 8)]
 
 
 def get_metrics(data, indices, config):
@@ -26,7 +30,7 @@ def get_metrics(data, indices, config):
     Given data, split info, and model info, return RMSE, correlation coefficent, and coefficient of determination
     for all observations, by site, and for anomalies (all observations from site mean).
 
-    Params
+    Args
     - data: 
     - indices:
     - config
@@ -43,7 +47,6 @@ def get_metrics(data, indices, config):
     yOut = np.zeros(len(indices))
     
     for k, ind in enumerate(indices):
-        k
         xS = x[pSLst[ind], ind, :][:, iS][None, ...]
         xL = x[pLLst[ind], ind, :][:, iL][None, ...]
         xM = x[pMLst[ind], ind, :][:, iM][None, ...]
@@ -86,13 +89,12 @@ def get_metrics(data, indices, config):
     tempS = jInd[indices]
     tempT = iInd[indices]
     testSite = np.unique(tempS)
-    # pdb.set_trace()
+
     siteLst = list()
     matResult = np.ndarray([len(testSite), 3])
     for i, k in enumerate(testSite):
         ind = np.where(tempS == k)[0]
         t = df.t[tempT[ind]]
-        # siteName = df.siteIdLst[k]
         siteLst.append([pred[ind], obs[ind], t])
         matResult[i, 0] = np.mean(pred[ind])
         matResult[i, 1] = np.mean(obs[ind])
