@@ -73,7 +73,7 @@ def main(args):
 
     for i, (method, seed, dropout, embedding_size, batch_size) in enumerate(hyperparam_combos):
         # print(method, seed, dropout, embedding_size)
-        run_name = f'{method}_{embedding_size}_{dropout}_{batch_size}'
+        run_name = f'strat_{method}_{embedding_size}_{dropout}_{batch_size}'
         train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed} --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat --wandb_name {wandb_name}'
         if method == 'cherry':
