@@ -67,6 +67,7 @@ def main(args):
     dropouts_lst = args.dropouts
     embedding_sizes_lst = args.embedding_sizes
     batch_sizes_lst = args.batch_sizes
+    wandb_name = args.wandb_name
 
     hyperparam_combos = list(product(methods_lst, seeds_lst, dropouts_lst, embedding_sizes_lst, batch_sizes_lst))
 
@@ -74,11 +75,11 @@ def main(args):
         # print(method, seed, dropout, embedding_size)
         run_name = f'{method}_{embedding_size}_{dropout}_{batch_size}'
         train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
-        cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed} --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat'
+        cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed} --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat --wandb_name {wandb_name}'
         if method == 'cherry':
             cmd_line += ' --test_epoch 25'
         print(i, cmd_line)
-        # submitJob(run_name, cmd_line)
+        submitJob(run_name, cmd_line)
 
 
 if __name__ == "__main__":
@@ -88,6 +89,7 @@ if __name__ == "__main__":
     parser.add_argument("--dropouts", type=list, default=DEFAULT_DROPOUTS)
     parser.add_argument("--embedding_sizes", type=list, default=DEFAULT_EMBEDDING_SIZES)
     parser.add_argument("--batch_sizes", type=list, default=DEFAULT_BATCH_SIZES)
+    parser.add_argument("--wandb_name", type=str, default="default")
     args = parser.parse_args()
 
     main(args)

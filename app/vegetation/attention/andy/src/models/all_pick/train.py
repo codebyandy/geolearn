@@ -57,6 +57,7 @@ def train(args, saveFolder):
     batch_size = args.batch_size
     test_epoch = args.test_epoch
     satellites = args.satellites
+    wandb_name = args.wandb_name
 
     run_details = {
         "run_name": run_name,
@@ -82,7 +83,7 @@ def train(args, saveFolder):
     if not args.testing:
         wandb.init(
             dir=os.path.join(kPath.dirVeg),
-            project="all_runs",
+            project=wandb_name,
             config=run_details
         )
         wandb.run.name = run_name
@@ -121,7 +122,7 @@ def train(args, saveFolder):
             wandb.define_metric(metric, summary="max")
     
     # Load
-    dataFolder = os.path.join(kPath.dirVeg, 'model', 'attention', 'dataset')
+    dataFolder = os.path.join(kPath.dirVeg, 'model', 'attention', 'stratified')
     subsetFile = os.path.join(dataFolder, 'subset.json')
 
     with open(subsetFile) as json_file:
@@ -317,6 +318,7 @@ if __name__ == "__main__":
     parser.add_argument("--cross_val", type=bool, default=False)
     parser.add_argument("--weights_path", type=str, default="")
     parser.add_argument("--device", type=int, default=-1)
+    parser.add_argument("--wandb_name", type=str, default="default")
     # dataset 
     parser.add_argument("--dataset", type=str, default="singleDaily-nadgrid", choices=["singleDaily", "singleDaily-modisgrid", "singleDaily-nadgrid"])
     parser.add_argument("--rho", type=int, default=45)
