@@ -6,10 +6,10 @@ import os
 
 
 DEFAULT_METHODS = ["all", "cherry"]
-DEFAULT_SEEDS = [0, 1, 2]
+DEFAULT_SEEDS = [0]
 DEFAULT_DROPOUTS = [0.2, 0.4, 0.6]
-DEFAULT_EMBEDDING_SIZES = [32, 64, 128]
-DEFAULT_BATCH_SIZES = [500, 1000, 2000]
+DEFAULT_EMBEDDING_SIZES = [32, 64]
+DEFAULT_BATCH_SIZES = [500, 1000]
 
 
 def submitJob(jobName, cmdLine, nH=24, nM=16):
@@ -77,8 +77,8 @@ def main(args):
         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed} --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat'
         if method == 'cherry':
             cmd_line += ' --test_epoch 25'
-        print(cmd_line)
-        submitJob(run_name, cmd_line)
+        print(i, cmd_line)
+        # submitJob(run_name, cmd_line)
 
 
 if __name__ == "__main__":
