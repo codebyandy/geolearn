@@ -10,7 +10,7 @@ Usage:
 import hydroDL.data.dbVeg
 from hydroDL.data import dbVeg
 from hydroDL.data import DataModel
-from hydroDL.master import  dataTs2Range
+from hydroDL.master import dataTs2Range
 from hydroDL import kPath
 
 import numpy as np

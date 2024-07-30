@@ -21,6 +21,7 @@ import pandas as pd
 from sklearn.metrics import r2_score
 import wandb
 
+from datetime import datetime
 import json
 import os
 import argparse
@@ -286,9 +287,7 @@ def train(args, saveFolder):
         metrics = pd.read_csv(metrics_path)
 
         best_metrics = metrics[metrics.qual_obs_coefdet == max(metrics.qual_obs_coefdet)]
-        # best_metrics['run_name'] = [run_name]
-        # best_metrics = best_metrics[['run_name'] + [x for x in best_metrics.columns if x != 'run_name']]
-        
+
         # Save best performing model
         old_best_model_path = os.path.join(saveFolder, f'model_ep{int(best_metrics.iloc[0].epoch)}.pth')
         new_best_model_path = os.path.join(saveFolder, 'best_model.pth')
@@ -306,7 +305,6 @@ def train(args, saveFolder):
             all_run_details.to_csv(all_run_details_path, index=False)
         else:
             run_details.to_csv(all_run_details_path, index=False)
-
 
 
 if __name__ == "__main__":
@@ -333,15 +331,16 @@ if __name__ == "__main__":
     parser.add_argument("--learning_rate", type=float, default=1e-2)
     parser.add_argument("--iters_per_epoch", type=int, default=20)
     parser.add_argument("--sched_start_epoch", type=int, default=200)
-    parser.add_argument("--test_epoch", type=int, default=50)
+    parser.add_argument("--test_epoch", type=int, default=25)
     parser.add_argument("--sample", type=bool, default=False)
     args = parser.parse_args()
     
     # create save dir / save hyperparameters
     saveFolder = ""
     if not args.testing:
-        saveFolder = os.path.join(kPath.dirVeg, 'runs', f"{args.run_name}")
-        
+        date_run_name = datetime.today().strftime('%Y-%m-%d') + '_' + args.run_name
+        saveFolder = os.path.join(kPath.dirVeg, 'runs', f"{date_run_name}")
+
         if not os.path.exists(saveFolder):
             os.mkdir(saveFolder)
         else:
