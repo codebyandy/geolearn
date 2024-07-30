@@ -216,6 +216,8 @@ def main(args):
 
     xS, xL, xM, pS, pL, pM, _, _ = randomSubset(data, split_indices["train"], split_indices["test_quality"], opt='train')
 
+    pdb.set_trace()
+
     nTup, lTup = (), ()
     if satellites == "no_landsat":
         print("no landsat model")
@@ -235,7 +237,13 @@ def main(args):
     model.load_state_dict(torch.load(model_weights_path))
     config = {"model" : model, "satellites" : satellites, "epoch" : None}
 
-    indices = [0, 1, 2, 3, 4, 5]
+    
+    quality_test_sites = dictSubset['testSite_k05']
+    poor_test_sites = dictSubset['testSite_underThresh']
+    quality_indices = np.where(np.isin(iInd, quality_test_sites))[0]
+    poor_indices = np.where(np.isin(iInd, poor_test_sites))[0]
+    indices = np.sort(np.concatenate([quality_indices, poor_indices]))
+
     pred = get_metrics(data, indices, config)
     jInd_ind = jInd[indices]
     iInd_ind = iInd[indices]
