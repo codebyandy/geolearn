@@ -22,6 +22,7 @@ import pandas as pd
 from sklearn.metrics import r2_score
 import wandb
 
+from datetime import datetime
 import json
 import os
 import argparse
@@ -122,7 +123,7 @@ def train(args, saveFolder):
             wandb.define_metric(metric, summary="max")
     
     # Load previously generated dataet splits
-    dataFolder = os.path.join(kPath.dirVeg, 'model', 'attention', 'stratified')
+    dataFolder = os.path.join(kPath.dirVeg, 'model', 'attention', 'dataset')
     subsetFile = os.path.join(dataFolder, 'subset.json')
 
     with open(subsetFile) as json_file:
@@ -311,10 +312,6 @@ def train(args, saveFolder):
             run_details.to_csv(all_run_details_path, index=False)
 
 
-
-     
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train model")
     # admin
@@ -346,7 +343,8 @@ if __name__ == "__main__":
     # create save dir / save hyperparameters
     saveFolder = ""
     if not args.testing:
-        saveFolder = os.path.join(kPath.dirVeg, 'runs', f"{args.run_name}")
+        date_run_name = datetime.today().strftime('%Y-%m-%d') + '_' + args.run_name
+        saveFolder = os.path.join(kPath.dirVeg, 'runs', f"{date_run_name}")
         
         if not os.path.exists(saveFolder):
             os.mkdir(saveFolder)

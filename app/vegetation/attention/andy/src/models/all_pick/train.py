@@ -123,7 +123,7 @@ def train(args, saveFolder):
             wandb.define_metric(metric, summary="max")
     
     # Load
-    dataFolder = os.path.join(kPath.dirVeg, 'model', 'attention', 'stratified')
+    dataFolder = os.path.join(kPath.dirVeg, 'model', 'attention', 'dataset')
     subsetFile = os.path.join(dataFolder, 'subset.json')
 
     with open(subsetFile) as json_file:
