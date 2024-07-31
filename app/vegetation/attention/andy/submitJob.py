@@ -4,14 +4,14 @@ import argparse
 import os
 
 DEFAULT_METHODS = ["all", "cherry"]
-DEFAULT_SEEDS = [1]
-DEFAULT_DROPOUTS = [0.2, 0.4, 0.6]
+DEFAULT_SEEDS = [1, 2, 3]
+DEFAULT_DROPOUTS = [0.4, 0.6]
 DEFAULT_EMBEDDING_SIZES = [32, 64]
-DEFAULT_BATCH_SIZES = [500, 1000]
-DEFAULT_OPTIMIZERS = ["adam", "sgd"]
-DEFAULT_LEARNING_RATES = [0.001, 0.0001]
-DEFAULT_ITERS_PER_EPOCH = [100, 200]
-DEFAULT_SCHED_START_EPOCHS = [10, 20]
+DEFAULT_BATCH_SIZES = [1000]
+DEFAULT_OPTIMIZERS = ["adam"]
+DEFAULT_LEARNING_RATES = [0.01]
+DEFAULT_ITERS_PER_EPOCH = [20]
+DEFAULT_SCHED_START_EPOCHS = [200]
 
 def submitJob(jobName, cmdLine, nH=24, nM=16):
     jobFile = os.path.join(kPath.dirJob, jobName)
@@ -67,12 +67,16 @@ def main(args):
     sched_start_epochs_lst = args.sched_start_epochs
     wandb_name = args.wandb_name
 
-    hyperparam_combos = list(product(methods_lst, seeds_lst, dropouts_lst, embedding_sizes_lst, batch_sizes_lst, optimizers_lst, learning_rates_lst, iters_per_epoch_lst, sched_start_epochs_lst))
+    hyperparam_combos = list(product(methods_lst, seeds_lst, dropouts_lst, embedding_sizes_lst, batch_sizes_lst, \
+                                     optimizers_lst, learning_rates_lst, iters_per_epoch_lst, sched_start_epochs_lst))
 
     for i, (method, seed, dropout, embedding_size, batch_size, optimizer, learning_rate, iters_per_epoch, sched_start_epoch) in enumerate(hyperparam_combos):
         run_name = f'{wandb_name}_{method}_{embedding_size}_{dropout}_{batch_size}_{optimizer}_{learning_rate}_{iters_per_epoch}_{sched_start_epoch}'
         train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
-        cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed} --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch} --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat --wandb_name {wandb_name}'
+        cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
+        cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
+        cmd_line += f' --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat --wandb_name {wandb_name}'
+        
         print(i, cmd_line)
         submitJob(run_name, cmd_line)
 
