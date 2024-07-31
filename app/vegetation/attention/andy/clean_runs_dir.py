@@ -1,6 +1,7 @@
 from hydroDL import kPath
 
 import os
+import shutil
 
 def delete_single_item_subdirs(parent_dir):
     for root, dirs, files in os.walk(parent_dir, topdown=False):
@@ -10,8 +11,8 @@ def delete_single_item_subdirs(parent_dir):
             items = os.listdir(dir_path)
             # If the subdirectory contains only one item, delete it
             if len(items) <= 1:
-                print(f"Deleting directory: {dir_path}")
-                os.rmdir(dir_path)
+                print(f"Deleting directory and its contents: {dir_path}")
+                shutil.rmtree(dir_path)
 
 # Example usage
 parent_directory = os.path.join(kPath.dirVeg, "runs")
