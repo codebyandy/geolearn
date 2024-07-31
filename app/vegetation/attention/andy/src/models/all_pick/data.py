@@ -40,9 +40,6 @@ def randomSubset(data, trainInd, testInd, satellites, opt='train', batch=1000,):
     
     matS1 = x[:, indSel, :][:, :, iS]
     matL1 = x[:, indSel, :][:, :, iL]
-    print("hiiiiiiiii")
-    import pdb
-    pdb.set_trace()
     matM1 = x[:, indSel, :][:, :, iM]
     xS = np.swapaxes(matS1, 0, 1)
     xL = np.swapaxes(matL1, 0, 1)

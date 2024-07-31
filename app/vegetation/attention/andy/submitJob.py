@@ -1,4 +1,6 @@
 from hydroDL import kPath
+from clean_runs_dir import delete_crashed_subdirs
+
 from itertools import product
 import argparse
 import os
@@ -56,6 +58,9 @@ def submitJobGPU(jobName, cmdLine, nH=24, nM=16):
     os.system('sbatch {}'.format(jobFile))
 
 def main(args):
+    parent_directory = os.path.join(kPath.dirVeg, "runs")
+    delete_crashed_subdirs(parent_directory)
+
     methods_lst = args.methods
     seeds_lst = args.seeds
     dropouts_lst = args.dropouts
@@ -71,7 +76,7 @@ def main(args):
                                      optimizers_lst, learning_rates_lst, iters_per_epoch_lst, sched_start_epochs_lst))
 
     for i, (method, seed, dropout, embedding_size, batch_size, optimizer, learning_rate, iters_per_epoch, sched_start_epoch) in enumerate(hyperparam_combos):
-        run_name = f'{wandb_name}_{method}_{embedding_size}_{dropout}_{batch_size}_{optimizer}_{learning_rate}_{iters_per_epoch}_{sched_start_epoch}'
+        run_name = f'{wandb_name}_{method}_{seed}_{embedding_size}_{dropout}_{batch_size}_{optimizer}_{learning_rate}_{iters_per_epoch}_{sched_start_epoch}'
         train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
         cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
@@ -91,7 +96,7 @@ if __name__ == "__main__":
     parser.add_argument("--learning_rates", type=list, default=DEFAULT_LEARNING_RATES)
     parser.add_argument("--iters_per_epoch", type=list, default=DEFAULT_ITERS_PER_EPOCH)
     parser.add_argument("--sched_start_epochs", type=list, default=DEFAULT_SCHED_START_EPOCHS)
-    parser.add_argument("--wandb_name", type=str, default="default")
+    parser.add_argument("--wandb_name", type=str, required=True)
     args = parser.parse_args()
 
     main(args)
