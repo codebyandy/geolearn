@@ -3,7 +3,7 @@ This file is for training the transformer model for LFMC prediction.
 """
 from model import FinalModel
 from data import randomSubset, prepare_data
-from models.all_pick.inference import test_metrics
+from inference import test_metrics
 
 # hydroDL module by Kuai Fang
 from hydroDL.data import dbVeg
