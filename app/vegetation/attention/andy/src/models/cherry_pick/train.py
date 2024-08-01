@@ -4,7 +4,7 @@ This file is for training the transformer model for LFMC prediction.
 
 from model import FinalModel
 from data import randomSubset, prepare_data
-from inference import test_metrics
+from models.cherry_pick.inference import test_metrics
 
 # hydroDL module by Kuai Fang
 from hydroDL.data import dbVeg

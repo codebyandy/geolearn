@@ -1,17 +1,10 @@
 """
-This file retrieves the daily LFMC predictions (from the 2016-10-15 to 2021-12-15) using the transformer model.
-It outputs an array of shape (num observations, 3). Here, num observations is # total days * # of sites.
-The columns are raw day (num days since 2016-10-15), site # (assigned by us), and LFMC prediction.
+This file can get either train or test metrics given a transformer model.
 
-This is a fast temporary and hacky solution.
-
-TO DO:
-1. prepare_data_all outputs array taht stores the data inefficiently. Good for training, but high memory.
-   Shape (rho, num obserations, num inputs). Lots of repeats.
-2. Inference takes observations 1 at a time (because of varying shapes).
-3. Exports raw day and site # (not interpretable unless converted).
+Usage:
+- Call the script with paths to a model to get train and test metrics.
+- Use `train_metrics` or `test_metrics` to get only those metrics.
 """
-
 
 # hydroDl module by Kuai Fang
 from hydroDL import kPath
@@ -30,103 +23,6 @@ from data import randomSubset, prepare_data
 from utils import varS, varL, varM
 
 import pdb
-
-# hydroDL module by Kuai Fang
-import hydroDL.data.dbVeg
-from hydroDL.data import dbVeg
-from hydroDL.data import DataModel
-from hydroDL.master import dataTs2Range
-from hydroDL import kPath
-
-import numpy as np
-import torch
-
-from utils import varS, varL, varM # Satellite variable names
-from utils import bS, bL, bM # Days per satellite
-
-
-def prepare_data_all(dataName, rho):
-    """
-    Loads the data, normalizes it, and processes it into the required shape and format 
-    for further analysis. It identifies the available days for each observation from various remote 
-    sensing sources (Sentinel, Landsat, MODIS) and filters the observations to retain only those with 
-    data available from all sources.
-
-    Args:
-        dataName (str): The name or path of the dataset to be loaded.
-        rho (int): The time window size for each observation.
-
-    Returns:
-        tuple: A tuple containing the following elements:
-            - df (DataFrameVeg): A custom DataFrameVeg object containing the loaded data.
-            - dm (DataModel): A custom DataModel object containing the normalized data.
-            - iInd (np.array): Array of day indices for the observations.
-            - jInd (np.array): Array of site indices for the observations.
-            - nMat (np.array): Matrix indicating the number of available days with data for each satellite 
-                               (Sentinel, Landsat, MODIS) for each observation.
-            - pSLst (list): List of arrays indicating the days with available data for Sentinel for each observation.
-            - pLLst (list): List of arrays indicating the days with available data for Landsat for each observation.
-            - pMLst (list): List of arrays indicating the days with available data for MODIS for each observation.
-            - x (np.array): Array of raw values for each observation in the shape (rho, number of observations, number of input features).
-            - rho (int): The time window size for each observation.
-            - xc (np.array): Array of constant variables for the observations.
-            - yc (np.array): Array of LFMC data for the observations.
-    """
-    # Load data with custom DataFrameVeg and DataModel classes
-    df = dbVeg.DataFrameVeg(dataName)
-    dm = DataModel(X=df.x, XC=df.xc, Y=df.y)
-    dm.trans(mtdDefault='minmax') # Min-max normalization
-    dataTup = dm.getData()
-
-    x, xc, y, _ = dataTup # NEW LINE
-    # temp_y = np.zeros(y.shape) # TEMP LINE
-    # temp_y[:2, :2, 0] = 1
-    # dataTup = (x, xc, temp_y, _) # TEMP LINE
-    dataTup = (x, xc, np.ones(y.shape), _) # NEW LINE
-
-    # To convert data to shape (Number of observations, rho, number of input features)
-    dataEnd, (iInd, jInd) = dataTs2Range(dataTup, rho, returnInd=True) # iInd: day, jInd: site
-    x, xc, _, yc = dataEnd 
-   
-    iInd = np.array(iInd) # TODO: Temporary fix
-    jInd = np.array(jInd) # TODO: Temporary fix
-    
-    iS = [df.varX.index(var) for var in varS]
-    iL = [df.varX.index(var) for var in varL]
-    iM = [df.varX.index(var) for var in varM]
-    
-    # For each remote sensing source (i.e. Sentinel, MODIS), for each LFMC observaton,
-    # create a list of days in the rho-window that have data 
-    # nMat: Number of days each satellite has data for, of shape (# obsevations, # satellites)
-    pSLst, pLLst, pMLst = list(), list(), list()
-    nMat = np.zeros([yc.shape[0], 3])
-    for k in range(nMat.shape[0]):
-        tempS = x[:, k, iS]
-        pS = np.where(~np.isnan(tempS).any(axis=1))[0]
-        tempL = x[:, k, iL]
-        pL = np.where(~np.isnan(tempL).any(axis=1))[0]
-        tempM = x[:, k, iM]
-        pM = np.where(~np.isnan(tempM).any(axis=1))[0]
-        pSLst.append(pS)
-        pLLst.append(pL)
-        pMLst.append(pM)
-        nMat[k, :] = [len(pS), len(pL), len(pM)]
-    
-    # only keep if data if there is at least 1 day of data for each remote sensing source
-    indKeep = np.where((nMat > 0).all(axis=1))[0]
-    x = x[:, indKeep, :]
-    xc = xc[indKeep, :]
-    yc = yc[indKeep, :]
-    nMat = nMat[indKeep, :]
-    pSLst = [pSLst[k] for k in indKeep]
-    pLLst = [pLLst[k] for k in indKeep]
-    pMLst = [pMLst[k] for k in indKeep]
-    
-    jInd = jInd[indKeep]
-    iInd = iInd[indKeep]
-
-    data = (df, dm, iInd, jInd, nMat, pSLst, pLLst, pMLst, x, rho, xc, yc)
-    return data
 
 
 def get_metrics(data, indices, config):
@@ -151,7 +47,6 @@ def get_metrics(data, indices, config):
     yOut = np.zeros(len(indices))
     
     for k, ind in enumerate(indices):
-        print(f"{k + 1} / {len(indices)} done")
         xS = x[pSLst[ind], ind, :][:, iS][None, ...]
         xL = x[pLLst[ind], ind, :][:, iL][None, ...]
         xM = x[pMLst[ind], ind, :][:, iM][None, ...]
@@ -180,11 +75,93 @@ def get_metrics(data, indices, config):
         yP = model(xTup, pTup, xcT, lTup)    
         yOut[k] = yP.detach().numpy()
     
-    # yT = yc[indices, 0]      
-    # obs = dm.transOutY(yT[:, None])[:, 0]
+    yT = yc[indices, 0]      
+    obs = dm.transOutY(yT[:, None])[:, 0]
     pred = dm.transOutY(yOut[:, None])[:, 0]
-    return pred
+    
+    # obs
+    rmse = np.sqrt(np.mean((obs - pred) ** 2))
+    corrcoef = np.corrcoef(obs, pred)[0, 1]
+    coef_det = r2_score(obs, pred)
+    obs_metrics = [rmse, corrcoef, coef_det]
+    
+    # site
+    tempS = jInd[indices]
+    tempT = iInd[indices]
+    testSite = np.unique(tempS)
 
+    siteLst = list()
+    matResult = np.ndarray([len(testSite), 3])
+    for i, k in enumerate(testSite):
+        ind = np.where(tempS == k)[0]
+        t = df.t[tempT[ind]]
+        siteLst.append([pred[ind], obs[ind], t])
+        matResult[i, 0] = np.mean(pred[ind])
+        matResult[i, 1] = np.mean(obs[ind])
+        matResult[i, 2] = np.corrcoef(pred[ind], obs[ind])[0, 1]
+     
+    rmse = np.sqrt(np.mean((matResult[:, 0] - matResult[:, 1]) ** 2))
+    corrcoef = np.corrcoef(matResult[:, 0], matResult[:, 1])[0, 1]
+    coef_det = r2_score(matResult[:, 0], matResult[:, 1])
+    site_metrics = [rmse, corrcoef, coef_det]
+    
+    # anomaly
+    aLst, bLst = list(), list()
+    
+    for site in siteLst:
+        aLst.append(site[0] - np.mean(site[0]))
+        bLst.append(site[1] - np.mean(site[1]))
+    
+    a, b = np.concatenate(aLst), np.concatenate(bLst)
+
+    rmse = np.sqrt(np.mean((a - b) ** 2))
+    corrcoef = np.corrcoef(a,b)[0, 1]
+    coef_det = r2_score(a, b)
+    anomaly_metrics = [rmse, corrcoef, coef_det]
+    
+    return (obs_metrics, site_metrics, anomaly_metrics)
+
+
+def test_metrics(data, split_indices, config):
+    # get metrics for both (1) qualtiy and (2) poor sites
+    obs_quality, site_quality, anomaly_quality = get_metrics(data, split_indices["test_quality"], config)
+    obs_poor, site_poor, anomaly_poor = get_metrics(data, split_indices["test_poor"], config)
+
+    # reformat all metrics to single dictionary
+    metric_names = ["rmse", "corrcoef", "coefdet"]
+
+    metrics = {"epoch": [config["epoch"]]}
+    metrics.update({f"qual_obs_{metric_names[i]}" : [obs_quality[i]] for i in range(3)})
+    metrics.update({f"qual_site_{metric_names[i]}" : [site_quality[i]] for i in range(3)})
+    metrics.update({f"qual_anomaly_{metric_names[i]}" : [anomaly_quality[i]] for i in range(3)})
+    metrics.update({f"poor_obs_{metric_names[i]}" : [obs_poor[i]] for i in range(3)})
+    metrics.update({f"poor_site_{metric_names[i]}" : [site_poor[i]] for i in range(3)})
+    metrics.update({f"poor_anomaly_{metric_names[i]}" :[anomaly_poor[i]] for i in range(3)})
+
+    return metrics
+
+
+def train_metrics(data, split_indices, config):
+    obs, site, anomaly= get_metrics(data, split_indices["train"], config)
+
+    # reformat all metrics to single dictionary
+    metric_names = ["rmse", "corrcoef", "coefdet"]
+
+    metrics = {}
+    metrics.update({f"train_obs_{metric_names[i]}" : [obs[i]] for i in range(3)})
+    metrics.update({f"train_site_{metric_names[i]}" : [site[i]] for i in range(3)})
+    metrics.update({f"train_anomaly_{metric_names[i]}" : [anomaly[i]] for i in range(3)})
+
+    return metrics
+
+
+def save_best_model(model_weights_path):
+    metrics_path = os.path.join(model_weights_path, 'metrics.csv')
+    metrics = pd.read_csv(metrics_path)
+    best_metrics = metrics[metrics.qual_obs_coefdet == max(metrics.qual_obs_coefdet)]
+    old_best_model_path = os.path.join(model_weights_path, f'model_ep{int(best_metrics.iloc[0].epoch)}.pth')
+    new_best_model_path = os.path.join(model_weights_path, 'best_model_so_far.pth')
+    shutil.copyfile(old_best_model_path, new_best_model_path)
 
 
 def main(args):        
@@ -198,9 +175,9 @@ def main(args):
         nh = hyperparameters['nh']
         rho = hyperparameters['rho']
 
-    data = prepare_data_all(dataset, rho)
+    data = prepare_data(dataset, rho)
     df, dm, iInd, jInd, nMat, pSLst, pLLst, pMLst, x, rho, xc, yc = data
-
+    
     # get pre-created data splits
     dataFolder = os.path.join(kPath.dirVeg, 'model', 'attention', 'dataset')
     subsetFile = os.path.join(dataFolder, 'subset.json')
@@ -229,31 +206,24 @@ def main(args):
     model = FinalModel(nTup, nxc, nh, 0)
     
     model_weights_path = os.path.join(model_dir_path, 'best_model.pth')
-    # if not os.path.exists(model_weights_path): 
-    #     save_best_model(model_dir_path)
-    #     model_weights_path = os.path.join(model_dir_path, 'best_model_so_far.pth')
+    if not os.path.exists(model_weights_path): 
+        save_best_model(model_dir_path)
+        model_weights_path = os.path.join(model_dir_path, 'best_model_so_far.pth')
     model.load_state_dict(torch.load(model_weights_path))
+
     config = {"model" : model, "satellites" : satellites, "epoch" : None}
+    metrics = {'model' : args.model_dir}
+    metrics.update(test_metrics(data, split_indices, config))
+    metrics.update(train_metrics(data, split_indices, config))
 
-    
-    quality_test_sites = dictSubset['testSite_k05']
-    poor_test_sites = dictSubset['testSite_underThresh']
-    quality_indices = np.where(np.isin(jInd, quality_test_sites))[0]
-    poor_indices = np.where(np.isin(jInd, poor_test_sites))[0]
-    indices = np.sort(np.concatenate([quality_indices, poor_indices]))
-
-    pred = get_metrics(data, indices, config)
-    jInd_ind = jInd[indices]
-    iInd_ind = iInd[indices]
-
-    pred = np.array(pred)
-    jInd_ind = np.array(jInd_ind)
-    iInd_ind = np.array(iInd_ind)
-
-    res = np.column_stack([pred, jInd_ind, iInd_ind])
-    path = os.path.join(kPath.dirVeg, "transformer_lfmc_daily.npy")
-    np.save(path, res)
-  
+    metrics = pd.DataFrame(metrics)
+    all_metrics_path = os.path.join(args.save_folder, 'inference.csv')
+    if os.path.exists(all_metrics_path):
+        all_metrics = pd.read_csv(all_metrics_path)
+        all_metrics = pd.concat([all_metrics, metrics])
+        all_metrics.to_csv(all_metrics_path, index=False)
+    else:
+        metrics.to_csv(all_metrics_path, index=False)
 
 
 if __name__ == "__main__":
