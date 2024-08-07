@@ -5,7 +5,7 @@ from itertools import product
 import argparse
 import os
 
-DEFAULT_METHODS = ["all", "cherry"]
+DEFAULT_METHODS = ["cherry"]
 DEFAULT_SEEDS = [1, 2, 3]
 DEFAULT_DROPOUTS = [0.4, 0.6]
 DEFAULT_EMBEDDING_SIZES = [32, 64]
