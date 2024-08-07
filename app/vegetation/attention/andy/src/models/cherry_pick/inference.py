@@ -37,7 +37,7 @@ def get_metrics(data, indices, config):
     Returns
     - 
     '''
-    df, dm, iInd, jInd, _, pSLst, pLLst, pMLst, x, rho, xc, yc = data
+    df, dm, iInd, jInd, _, pSLst, pMLst, x, rho, xc, yc = data
     model, satellites  = config["model"], config["satellites"]
 
     model.eval()
@@ -48,17 +48,17 @@ def get_metrics(data, indices, config):
     
     for k, ind in enumerate(indices):
         xS = x[pSLst[ind], ind, :][:, iS][None, ...]
-        xL = x[pLLst[ind], ind, :][:, iL][None, ...]
+        # xL = x[pLLst[ind], ind, :][:, iL][None, ...]
         xM = x[pMLst[ind], ind, :][:, iM][None, ...]
         pS = (pSLst[ind][None, ...] - rho) / rho
-        pL = (pLLst[ind][None, ...] - rho) / rho
+        # pL = (pLLst[ind][None, ...] - rho) / rho
         pM = (pMLst[ind][None, ...] - rho) / rho
         xcT = xc[ind][None, ...]
         xS = torch.from_numpy(xS).float()
-        xL = torch.from_numpy(xL).float()
+        # xL = torch.from_numpy(xL).float()
         xM = torch.from_numpy(xM).float()
         pS = torch.from_numpy(pS).float()
-        pL = torch.from_numpy(pL).float()
+        # pL = torch.from_numpy(pL).float()
         pM = torch.from_numpy(pM).float()
         xcT = torch.from_numpy(xcT).float()
 
@@ -69,7 +69,7 @@ def get_metrics(data, indices, config):
             lTup = (xS.shape[1], xM.shape[1])
         else:
             xTup = (xS, xL, xM)
-            pTup = (pS, pL, pM)
+            # pTup = (pS, pL, pM)
             lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
         
         yP = model(xTup, pTup, xcT, lTup)    
@@ -176,7 +176,7 @@ def main(args):
         rho = hyperparameters['rho']
 
     data = prepare_data(dataset, rho)
-    df, dm, iInd, jInd, nMat, pSLst, pLLst, pMLst, x, rho, xc, yc = data
+    df, dm, iInd, jInd, nMat, pSLst, pMLst, x, rho, xc, yc = data
     
     # get pre-created data splits
     dataFolder = os.path.join(kPath.dirVeg, 'model', 'attention', 'dataset')
@@ -191,7 +191,7 @@ def main(args):
     split_indices["test_quality"] = dictSubset['testInd_k05']
     split_indices["test_poor"] = dictSubset['testInd_underThresh']
 
-    xS, xL, xM, pS, pL, pM, _, _ = randomSubset(data, split_indices["train"], split_indices["test_quality"], opt='train')
+    xS, xM, pS, pM, _, _ = randomSubset(data, split_indices["train"], split_indices["test_quality"], opt='train')
 
     nTup, lTup = (), ()
     if satellites == "no_landsat":

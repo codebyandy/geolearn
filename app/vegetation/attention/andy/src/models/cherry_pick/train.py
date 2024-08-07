@@ -44,7 +44,7 @@ def set_seed(seed):
     print(f"seed {seed} set")
 
 
-def train(args, saveFolder):
+def train(args, saveFolder, fold):
     run_name = args.run_name
     dataName= args.dataset
     rho = args.rho
@@ -60,8 +60,12 @@ def train(args, saveFolder):
     satellites = args.satellites
     wandb_name = args.wandb_name
 
+    saveFolder = os.path.join(saveFolder, str(fold))
+    os.mkdir(saveFolder)
+    
     run_details = {
         "run_name": run_name,
+        "data_fold": fold,
         "training_method": "cherry_picking",
         "rho": rho,
         "embedding_size": nh,
@@ -78,7 +82,7 @@ def train(args, saveFolder):
 
     # Store all required data in `data` tuple
     data = prepare_data(args.dataset, args.rho)
-    df, dm, iInd, jInd, nMat, pSLst, pLLst, pMLst, x, rho, xc, yc = data # TODO: Clean up or define in README
+    df, dm, iInd, jInd, nMat, pSLst, pMLst, x, rho, xc, yc = data # TODO: Clean up or define in README
 
     # Do not log run if just a test
     if not args.testing:
@@ -119,11 +123,11 @@ def train(args, saveFolder):
         ]
 
         # Define each metric to have its summary as "max"
-        for metric in metrics:
-            wandb.define_metric(metric, summary="max")
-    
+        # for metric in metrics:
+        #     wandb.define_metric(metric, summary="max")
+
     # Load previously generated dataet splits
-    dataFolder = os.path.join(kPath.dirVeg, 'model', 'attention', 'dataset')
+    dataFolder = os.path.join(kPath.dirVeg, 'model', 'attention', 'stratified')
     subsetFile = os.path.join(dataFolder, 'subset.json')
 
     with open(subsetFile) as json_file:
@@ -131,12 +135,12 @@ def train(args, saveFolder):
     print("loaded dictSubset")
     
     split_indicies = {}
-    split_indicies["train"] = dictSubset['trainInd_k05']
-    split_indicies["test_quality"] = dictSubset['testInd_k05']
+    split_indicies["train"] = dictSubset[f'trainInd_k{fold}5']
+    split_indicies["test_quality"] = dictSubset[f'testInd_k{fold}5']
     split_indicies["test_poor"] = dictSubset['testInd_underThresh']
 
     # Get a random subset to get important shapes
-    xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(data, split_indicies["train"], split_indicies["test_quality"], 'train', batch_size)
+    xS, xM, pS, pM, xcT, yT = randomSubset(data, split_indicies["train"], split_indicies["test_quality"], 'train', batch_size)
     nTup, lTup = (), () # nTup (list[int]): Number of input features for each remote sensing source (i.e. Sentinel, Modis) 
                         # lTup (tuple[int]): number of sampled days for each remote sensing source
     if satellites == "no_landsat":
@@ -177,7 +181,7 @@ def train(args, saveFolder):
             model.zero_grad()
             
             # One training iteration
-            xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(data, split_indicies["train"] , split_indicies["test_quality"] , 'train', batch_size)
+            xS, xM, pS, pM, xcT, yT = randomSubset(data, split_indicies["train"] , split_indicies["test_quality"] , 'train', batch_size)
             xTup, pTup = (), ()
             if satellites == "no_landsat":
                 xTup = (xS, xM)
@@ -211,7 +215,7 @@ def train(args, saveFolder):
         optimizer.zero_grad()
 
         # Get metrics on subset of test set at the end of every epoch
-        xS, xL, xM, pS, pL, pM, xcT, yT = randomSubset(data, split_indicies["train"] , split_indicies["test_quality"], 'test', batch_size)
+        xS, xM, pS, pM, xcT, yT = randomSubset(data, split_indicies["train"] , split_indicies["test_quality"], 'test', batch_size)
         xTup, pTup = (), ()
         if satellites == "no_landsat":
             xTup = (xS, xM)
@@ -285,22 +289,20 @@ def train(args, saveFolder):
     time_df.to_csv(time_path, index=False)
 
     if not args.testing:
-        # Determine best performing epoch
         metrics_path = os.path.join(saveFolder, 'metrics.csv')
         metrics = pd.read_csv(metrics_path)
 
-        best_metrics = metrics[metrics.qual_obs_coefdet == max(metrics.qual_obs_coefdet)]
-        # best_metrics['run_name'] = [run_name]
-        # best_metrics = best_metrics[['run_name'] + [x for x in best_metrics.columns if x != 'run_name']]
+        reported_metrics = metrics.iloc[-1]
+        # reported_metrics = metrics[metrics.qual_obs_coefdet == max(metrics.qual_obs_coefdet)]
         
-        # Save best performing model
-        old_best_model_path = os.path.join(saveFolder, f'model_ep{int(best_metrics.iloc[0].epoch)}.pth')
-        new_best_model_path = os.path.join(saveFolder, 'best_model.pth')
-        shutil.copyfile(old_best_model_path, new_best_model_path)
+        # pdb.set_trace()
+        old_reported_model_path = os.path.join(saveFolder, f'model_ep{int(reported_metrics.epoch)}.pth')
+        new_reported_model_path = os.path.join(saveFolder, 'best_model.pth')
+        shutil.copyfile(old_reported_model_path, new_reported_model_path)
 
         # Update sheet containing all runs and best metrics
         run_details.update(time_data)
-        run_details.update(best_metrics)
+        run_details.update(reported_metrics)
         run_details = pd.DataFrame(run_details)
 
         all_run_details_path = os.path.join(kPath.dirVeg, 'runs', 'best_metrics_all_runs.csv')
@@ -323,8 +325,8 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=int, default=-1)
     parser.add_argument("--wandb_name", type=str, default="default")
     # dataset 
-    parser.add_argument("--dataset", type=str, default="singleDaily-nadgrid",
-                        choices=["singleDaily", "singleDaily-modisgrid", "singleDaily-nadgrid"])
+    parser.add_argument("--dataset", type=str, default="singleDaily-modisgrid-new-const",
+                        choices=["singleDaily", "singleDaily-modisgrid", "singleDaily-nadgrid", "singleDaily-modisgrid-new-const"])
     parser.add_argument("--rho", type=int, default=45)
     parser.add_argument("--satellites", type=str, default="all")
     # model
@@ -339,6 +341,8 @@ if __name__ == "__main__":
     parser.add_argument("--sched_start_epoch", type=int, default=200)
     parser.add_argument("--test_epoch", type=int, default=50)
     args = parser.parse_args()
+
+    set_seed(args.seed)
     
     # create save dir / save hyperparameters
     saveFolder = ""
@@ -356,7 +360,8 @@ if __name__ == "__main__":
             tosave = vars(args)
             json.dump(tosave, f, indent=4)
 
-    train(args, saveFolder)
-    set_seed(args.seed)
+    for fold in range(5):
+        train(args, saveFolder, fold)
+    
 
 
