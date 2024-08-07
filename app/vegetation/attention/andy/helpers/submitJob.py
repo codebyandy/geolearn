@@ -72,6 +72,9 @@ def main(args):
     sched_start_epochs_lst = args.sched_start_epochs
     wandb_name = args.wandb_name
     note = args.note
+    split_version = args.split_version
+    dataset = args.dataset
+    cross_val = args.cross_val
 
     hyperparam_combos = list(product(methods_lst, seeds_lst, dropouts_lst, embedding_sizes_lst, batch_sizes_lst, \
                                      optimizers_lst, learning_rates_lst, iters_per_epoch_lst, sched_start_epochs_lst))
@@ -84,7 +87,8 @@ def main(args):
         train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
         cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
-        cmd_line += f' --epochs 1000 --satellites no_landsat --wandb_name {wandb_name}'
+        cmd_line += f' --epochs 500 --satellites no_landsat --wandb_name {wandb_name}'
+        cmd_line += f' --split_version {split_version} --dataset {dataset} --cross_val {cross_val}'
         
         print(i, cmd_line)
         submitJob(run_name, cmd_line)
@@ -102,6 +106,9 @@ if __name__ == "__main__":
     parser.add_argument("--sched_start_epochs", type=list, default=DEFAULT_SCHED_START_EPOCHS)
     parser.add_argument("--wandb_name", type=str, required=True)
     parser.add_argument("--note", type=str, default="")
+    parser.add_argument("--split_version", type=str, default="dataset")
+    parser.add_argument("--dataset", type=str, default="singeDaily-nadgrid")
+    parser.add_argument("--cross_val", type=bool, default=True)
     args = parser.parse_args()
 
     main(args)

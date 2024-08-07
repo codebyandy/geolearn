@@ -59,9 +59,11 @@ def train(args, saveFolder, fold):
     test_epoch = args.test_epoch
     satellites = args.satellites
     wandb_name = args.wandb_name
+    split_version = args.split_version
 
-    saveFolder = os.path.join(saveFolder, str(fold))
-    os.mkdir(saveFolder)
+    if not args.testing:
+        saveFolder = os.path.join(saveFolder, str(fold))
+        os.mkdir(saveFolder)
     
     run_details = {
         "run_name": run_name,
@@ -127,7 +129,7 @@ def train(args, saveFolder, fold):
         #     wandb.define_metric(metric, summary="max")
 
     # Load previously generated dataet splits
-    dataFolder = os.path.join(kPath.dirVeg, 'model', 'attention', 'stratified')
+    dataFolder = os.path.join(kPath.dirVeg, 'model', 'attention', split_version)
     subsetFile = os.path.join(dataFolder, 'subset.json')
 
     with open(subsetFile) as json_file:
@@ -327,6 +329,7 @@ if __name__ == "__main__":
     # dataset 
     parser.add_argument("--dataset", type=str, default="singleDaily-modisgrid-new-const",
                         choices=["singleDaily", "singleDaily-modisgrid", "singleDaily-nadgrid", "singleDaily-modisgrid-new-const"])
+    parser.add_argument("--split_version", type=str, default="dataset", choices=["dataset", "stratified"])
     parser.add_argument("--rho", type=int, default=45)
     parser.add_argument("--satellites", type=str, default="all")
     # model
@@ -361,6 +364,8 @@ if __name__ == "__main__":
             json.dump(tosave, f, indent=4)
 
     for fold in range(5):
+        if not args.cross_val and fold > 0:
+            break 
         train(args, saveFolder, fold)
     
 
