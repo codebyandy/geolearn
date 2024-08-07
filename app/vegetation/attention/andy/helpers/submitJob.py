@@ -107,7 +107,7 @@ if __name__ == "__main__":
     parser.add_argument("--wandb_name", type=str, required=True)
     parser.add_argument("--note", type=str, default="")
     parser.add_argument("--split_version", type=str, default="dataset")
-    parser.add_argument("--dataset", type=str, default="singeDaily-nadgrid")
+    parser.add_argument("--dataset", type=str, default="singleDaily-nadgrid")
     parser.add_argument("--cross_val", type=bool, default=True)
     args = parser.parse_args()
 
