@@ -71,12 +71,16 @@ def main(args):
     iters_per_epoch_lst = args.iters_per_epoch
     sched_start_epochs_lst = args.sched_start_epochs
     wandb_name = args.wandb_name
+    note = args.note
 
     hyperparam_combos = list(product(methods_lst, seeds_lst, dropouts_lst, embedding_sizes_lst, batch_sizes_lst, \
                                      optimizers_lst, learning_rates_lst, iters_per_epoch_lst, sched_start_epochs_lst))
 
     for i, (method, seed, dropout, embedding_size, batch_size, optimizer, learning_rate, iters_per_epoch, sched_start_epoch) in enumerate(hyperparam_combos):
-        run_name = f'{wandb_name}_{method}_{embedding_size}_{dropout}_{seed}'
+        if note:
+            run_name = f'{wandb_name}_{note}_{embedding_size}_{dropout}_{seed}'
+        else:
+            run_name = f'{wandb_name}_{embedding_size}_{dropout}_{seed}'
         train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
         cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
@@ -97,6 +101,7 @@ if __name__ == "__main__":
     parser.add_argument("--iters_per_epoch", type=list, default=DEFAULT_ITERS_PER_EPOCH)
     parser.add_argument("--sched_start_epochs", type=list, default=DEFAULT_SCHED_START_EPOCHS)
     parser.add_argument("--wandb_name", type=str, required=True)
+    parser.add_argument("--note", type=str, default="")
     args = parser.parse_args()
 
     main(args)
