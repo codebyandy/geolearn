@@ -80,7 +80,7 @@ def main(args):
         train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
         cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
-        cmd_line += f' --epochs 1000 --dataset singleDaily-nadgrid --satellites no_landsat --wandb_name {wandb_name}'
+        cmd_line += f' --epochs 1000 --satellites no_landsat --wandb_name {wandb_name}'
         
         print(i, cmd_line)
         submitJob(run_name, cmd_line)
