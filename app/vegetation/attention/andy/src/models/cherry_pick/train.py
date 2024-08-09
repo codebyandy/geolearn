@@ -327,8 +327,7 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=int, default=-1)
     parser.add_argument("--wandb_name", type=str, default="default")
     # dataset 
-    parser.add_argument("--dataset", type=str, default="singleDaily-modisgrid-new-const",
-                        choices=["singleDaily", "singleDaily-modisgrid", "singleDaily-nadgrid", "singleDaily-modisgrid-new-const"])
+    parser.add_argument("--dataset", type=str, default="singleDaily-modisgrid-new-const")
     parser.add_argument("--split_version", type=str, default="dataset", choices=["dataset", "stratified"])
     parser.add_argument("--rho", type=int, default=45)
     parser.add_argument("--satellites", type=str, default="all")
