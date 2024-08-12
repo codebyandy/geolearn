@@ -6,7 +6,12 @@
 # python helpers/submitJob.py --wandb_name new-dataset --note new-data_no-stratify --split_version dataset --dataset singleDaily-modisgrid-new-const --cross_val True
 # python helpers/submitJob.py --wandb_name new-dataset --note new-data_stratify --split_version stratified --dataset singleDaily-modisgrid-new-const --cross_val True
 
+# python helpers/submitJob.py --wandb_name new-dataset --note nadgrid --split_version dataset --dataset singleDaily-nadgrid --cross_val True
+# python helpers/submitJob.py --wandb_name new-dataset --note nadgrid-new-const --split_version dataset --dataset singleDaily-nadgrid-new-const --cross_val True
+# python helpers/submitJob.py --wandb_name new-dataset --note modisgrid --split_version dataset --dataset singleDaily-modisgrid --cross_val True
+# python helpers/submitJob.py --wandb_name new-dataset --note modisgrid-new-const --split_version dataset --dataset singleDaily-modisgrid-new-const --cross_val True
+
 python helpers/submitJob.py --wandb_name new-dataset --note nadgrid --split_version dataset --dataset singleDaily-nadgrid --cross_val True
-python helpers/submitJob.py --wandb_name new-dataset --note nadgrid-new-const --split_version dataset --dataset singleDaily-nadgrid-new-const --cross_val True
-python helpers/submitJob.py --wandb_name new-dataset --note modisgrid --split_version dataset --dataset singleDaily-modisgrid --cross_val True
+python helpers/submitJob.py --wandb_name new-dataset --note nadgrid --split_version stratified --dataset singleDaily-nadgrid --cross_val True
 python helpers/submitJob.py --wandb_name new-dataset --note modisgrid-new-const --split_version dataset --dataset singleDaily-modisgrid-new-const --cross_val True
+python helpers/submitJob.py --wandb_name new-dataset --note modisgrid-new-const --split_version stratified --dataset singleDaily-modisgrid-new-const --cross_val True

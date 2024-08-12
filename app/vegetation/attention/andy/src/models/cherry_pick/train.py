@@ -4,7 +4,7 @@ This file is for training the transformer model for LFMC prediction.
 
 from model import FinalModel
 from data import randomSubset, prepare_data
-from inference import test_metrics
+from inference import test_metrics, train_metrics
 
 # hydroDL module by Kuai Fang
 from hydroDL.data import dbVeg
@@ -66,7 +66,8 @@ def train(args, saveFolder, fold):
         os.mkdir(saveFolder)
     
     run_details = {
-        "run_name": run_name,
+        "date": datetime.today().strftime('%Y-%m-%d'),
+        "run_name": run_name + f"_f{fold}",
         "data_fold": fold,
         "training_method": "cherry_picking",
         "rho": rho,
@@ -295,9 +296,6 @@ def train(args, saveFolder, fold):
         metrics = pd.read_csv(metrics_path)
 
         reported_metrics = metrics.iloc[-1]
-        # reported_metrics = metrics[metrics.qual_obs_coefdet == max(metrics.qual_obs_coefdet)]
-        
-        # pdb.set_trace()
         old_reported_model_path = os.path.join(saveFolder, f'model_ep{int(reported_metrics.epoch)}.pth')
         new_reported_model_path = os.path.join(saveFolder, 'best_model.pth')
         shutil.copyfile(old_reported_model_path, new_reported_model_path)
@@ -305,6 +303,12 @@ def train(args, saveFolder, fold):
         # Update sheet containing all runs and best metrics
         run_details.update(time_data)
         run_details.update(reported_metrics)
+
+        config = {"model" : model, "satellites" : satellites, "epoch" : ep}
+        full_train_metrics = train_metrics(data, split_indicies, config)
+        full_train_metrics_floats = {k : v[0] for k, v in full_train_metrics.items()}
+        run_details.update(full_train_metrics)
+
         run_details = pd.DataFrame(run_details)
 
         all_run_details_path = os.path.join(kPath.dirVeg, 'runs', 'best_metrics_all_runs.csv')

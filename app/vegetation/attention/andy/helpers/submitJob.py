@@ -6,7 +6,7 @@ import argparse
 import os
 
 DEFAULT_METHODS = ["cherry"]
-DEFAULT_SEEDS = [1]
+DEFAULT_SEEDS = [0, 1, 2]
 DEFAULT_DROPOUTS = [0.6]
 DEFAULT_EMBEDDING_SIZES = [64]
 DEFAULT_BATCH_SIZES = [500]
@@ -81,9 +81,9 @@ def main(args):
 
     for i, (method, seed, dropout, embedding_size, batch_size, optimizer, learning_rate, iters_per_epoch, sched_start_epoch) in enumerate(hyperparam_combos):
         if note:
-            run_name = f'{wandb_name}_{note}_{embedding_size}_{dropout}_{seed}'
+            run_name = f'{note}_{embedding_size}_{dropout}_{seed}'
         else:
-            run_name = f'{wandb_name}_{embedding_size}_{dropout}_{seed}'
+            run_name = f'{embedding_size}_{dropout}_{seed}'
         train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
         cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'

@@ -10,7 +10,7 @@ def delete_crashed_subdirs(parent_dir):
             # List items in the subdirectory
             items = os.listdir(dir_path)
             # If the subdirectory contains only one item, delete it
-            if len(items) <= 1:
+            if len(items) <= 2:
                 print(f"Deleting directory and its contents: {dir_path}")
                 shutil.rmtree(dir_path)
 
