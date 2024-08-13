@@ -1,0 +1,1 @@
+scp avhuynh@sherlock.stanford.edu:~/lfmc/data/runs/best_metrics_all_runs.csv ~/Desktop

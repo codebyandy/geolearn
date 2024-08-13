@@ -67,7 +67,7 @@ def train(args, saveFolder, fold):
     
     run_details = {
         "date": datetime.today().strftime('%Y-%m-%d'),
-        "run_name": run_name + f"_f{fold}",
+        "run_name": run_name,
         "data_fold": fold,
         "training_method": "cherry_picking",
         "rho": rho,
