@@ -89,7 +89,7 @@ def main(args):
         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
         cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
         cmd_line += f' --epochs 500 --satellites no_landsat --wandb_name {wandb_name}'
-        cmd_line += f' --split_version {split_version} --dataset {dataset} --cross_val {cross_val} --test_epoch{test_epoch}'
+        cmd_line += f' --split_version {split_version} --dataset {dataset} --cross_val {cross_val} --test_epoch {test_epoch}'
         
         print(i, cmd_line)
         submitJob(run_name, cmd_line)
