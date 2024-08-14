@@ -100,7 +100,7 @@ if __name__ == "__main__":
     parser.add_argument("--seeds", type=list, default=DEFAULT_SEEDS)
     parser.add_argument("--dropouts", type=list, default=DEFAULT_DROPOUTS)
     # parser.add_argument("--embedding_sizes", type=list, default=DEFAULT_EMBEDDING_SIZES)
-    parser.add_argument("--embedding_size", type=list, default=DEFAULT_EMBEDDING_SIZES)
+    parser.add_argument("--embedding_sizes", type=list, default=DEFAULT_EMBEDDING_SIZES)
     parser.add_argument("--batch_sizes", type=list, default=DEFAULT_BATCH_SIZES)
     parser.add_argument("--optimizers", type=list, default=DEFAULT_OPTIMIZERS)
     parser.add_argument("--learning_rate", type=float, default=0.01)
