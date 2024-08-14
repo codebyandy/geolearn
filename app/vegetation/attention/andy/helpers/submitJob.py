@@ -7,8 +7,8 @@ import os
 
 DEFAULT_METHODS = ["cherry"]
 DEFAULT_SEEDS = [0, 1, 2]
-DEFAULT_DROPOUTS = [0.6]
-DEFAULT_EMBEDDING_SIZES = [64]
+DEFAULT_DROPOUTS = [0.4, 0.6]
+DEFAULT_EMBEDDING_SIZES = [32, 64]
 DEFAULT_BATCH_SIZES = [500]
 DEFAULT_OPTIMIZERS = ["adam"]
 DEFAULT_LEARNING_RATES = [0.01]
@@ -75,6 +75,7 @@ def main(args):
     split_version = args.split_version
     dataset = args.dataset
     cross_val = args.cross_val
+    test_epoch = args.test_epoch
 
     hyperparam_combos = list(product(methods_lst, seeds_lst, dropouts_lst, embedding_sizes_lst, batch_sizes_lst, \
                                      optimizers_lst, learning_rates_lst, iters_per_epoch_lst, sched_start_epochs_lst))
@@ -88,7 +89,7 @@ def main(args):
         cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
         cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
         cmd_line += f' --epochs 500 --satellites no_landsat --wandb_name {wandb_name}'
-        cmd_line += f' --split_version {split_version} --dataset {dataset} --cross_val {cross_val}'
+        cmd_line += f' --split_version {split_version} --dataset {dataset} --cross_val {cross_val} --test_epoch{test_epoch}'
         
         print(i, cmd_line)
         submitJob(run_name, cmd_line)
@@ -98,7 +99,8 @@ if __name__ == "__main__":
     parser.add_argument("--methods", type=list, default=DEFAULT_METHODS)
     parser.add_argument("--seeds", type=list, default=DEFAULT_SEEDS)
     parser.add_argument("--dropouts", type=list, default=DEFAULT_DROPOUTS)
-    parser.add_argument("--embedding_sizes", type=list, default=DEFAULT_EMBEDDING_SIZES)
+    # parser.add_argument("--embedding_sizes", type=list, default=DEFAULT_EMBEDDING_SIZES)
+    parser.add_argument("--embedding_size", type=list, default=DEFAULT_EMBEDDING_SIZES)
     parser.add_argument("--batch_sizes", type=list, default=DEFAULT_BATCH_SIZES)
     parser.add_argument("--optimizers", type=list, default=DEFAULT_OPTIMIZERS)
     parser.add_argument("--learning_rate", type=float, default=0.01)
@@ -109,6 +111,7 @@ if __name__ == "__main__":
     parser.add_argument("--split_version", type=str)
     parser.add_argument("--dataset", type=str)
     parser.add_argument("--cross_val", type=bool, default=True)
+    parser.add_argument("--test_epoch", type=int, default=50)
     args = parser.parse_args()
 
     main(args)
