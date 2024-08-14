@@ -67,7 +67,7 @@ def main(args):
     embedding_sizes_lst = args.embedding_sizes
     batch_sizes_lst = args.batch_sizes
     optimizers_lst = args.optimizers
-    learning_rates_lst = args.learning_rates
+    learning_rates_lst = [args.learning_rate]
     iters_per_epoch_lst = args.iters_per_epoch
     sched_start_epochs_lst = args.sched_start_epochs
     wandb_name = args.wandb_name
