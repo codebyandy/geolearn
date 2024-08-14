@@ -110,8 +110,8 @@ class FinalModel(nn.Module):
         self.ffn2 = PositionWiseFFN(nh, 1)
         for p in self.parameters():
             if p.dim() > 1:
-                # nn.init.xavier_uniform_(p)
-                nn.init.kaiming_uniform_(p, mode='fan_in', nonlinearity='relu')
+                nn.init.xavier_uniform_(p)
+                # nn.init.kaiming_uniform_(p, mode='fan_in', nonlinearity='relu')
 
     def forward(self, x, pos, xcT, lTup):
         """
