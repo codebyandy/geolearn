@@ -58,8 +58,8 @@ def submitJobGPU(jobName, cmdLine, nH=24, nM=16):
     os.system('sbatch {}'.format(jobFile))
 
 def main(args):
-    parent_directory = os.path.join(kPath.dirVeg, "runs")
-    delete_crashed_subdirs(parent_directory)
+    # parent_directory = os.path.join(kPath.dirVeg, "runs")
+    # delete_crashed_subdirs(parent_directory)
 
     methods_lst = args.methods
     seeds_lst = args.seeds
