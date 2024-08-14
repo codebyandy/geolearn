@@ -101,7 +101,7 @@ if __name__ == "__main__":
     parser.add_argument("--embedding_sizes", type=list, default=DEFAULT_EMBEDDING_SIZES)
     parser.add_argument("--batch_sizes", type=list, default=DEFAULT_BATCH_SIZES)
     parser.add_argument("--optimizers", type=list, default=DEFAULT_OPTIMIZERS)
-    parser.add_argument("--learning_rates", type=list, default=DEFAULT_LEARNING_RATES)
+    parser.add_argument("--learning_rate", type=float, default=0.01)
     parser.add_argument("--iters_per_epoch", type=list, default=DEFAULT_ITERS_PER_EPOCH)
     parser.add_argument("--sched_start_epochs", type=list, default=DEFAULT_SCHED_START_EPOCHS)
     parser.add_argument("--wandb_name", type=str, required=True)

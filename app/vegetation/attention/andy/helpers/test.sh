@@ -17,5 +17,5 @@
 # python helpers/submitJob.py --wandb_name stratify-check2 --note modisgrid-new-const-STRAT --split_version stratified --dataset singleDaily-modisgrid-new-const --cross_val True
 
 # He / Learning rate
-python helpers/submitJob.py --wandb_name stratify-check2 --note nadgrid-STRAT-lr --split_version stratified --dataset singleDaily-nadgrid --cross_val True --seed 2 --learning_rates 0.05
-python helpers/submitJob.py --wandb_name stratify-check2 --note modisgrid-new-const-STRAT-lr --split_version stratified --dataset singleDaily-modisgrid-new-const --cross_val True --seed 2 --learning_rates 0.05
+python helpers/submitJob.py --wandb_name stratify-check2 --note nadgrid-STRAT-lr --split_version stratified --dataset singleDaily-nadgrid --cross_val True --seed 2 --learning_rate 0.05
+python helpers/submitJob.py --wandb_name stratify-check2 --note modisgrid-new-const-STRAT-lr --split_version stratified --dataset singleDaily-modisgrid-new-const --cross_val True --seed 2 --learning_rate 0.05
