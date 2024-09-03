@@ -80,7 +80,6 @@ def main(args):
     run_name = args.run_name
     split_version = args.split_version
     dataset = args.dataset
-    cross_val = args.cross_val
     test_epoch = args.test_epoch
 
     batch_size = args.batch_size
