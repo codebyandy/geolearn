@@ -1,3 +1,4 @@
+# Cancel all
 # squeue -u $USER | awk '{print $1}' | tail -n+2 | xargs scancel
 
 from hydroDL import kPath
@@ -107,7 +108,7 @@ def main(args):
             cmd_line += f' --epochs {epochs} --satellites no_landsat --wandb_name {wandb_name}'
             cmd_line += f' --split_version {split_version} --dataset {dataset} --cross_val {cross_val} --test_epoch {test_epoch} --fold {fold}'
             print(' Submitted fold', fold)
-            # submitJob(run_name, cmd_line)
+            submitJob(run_name, cmd_line)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train model")
