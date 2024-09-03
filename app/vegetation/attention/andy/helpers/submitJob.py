@@ -1,3 +1,5 @@
+# squeue -u $USER | awk '{print $1}' | tail -n+2 | xargs scancel
+
 from hydroDL import kPath
 
 from itertools import product
@@ -89,15 +91,15 @@ def main(args):
     hyperparam_combos = list(product(methods_lst, seeds_lst, dropouts_lst, embedding_sizes_lst, learning_rates_lst))
     
     for i, (method, seed, dropout, embedding_size, learning_rate) in enumerate(hyperparam_combos):
-        run_name = f'{run_name}_{method}_{embedding_size}_{dropout}_{learning_rate}_{seed}'
-        save_path = os.path.join(kPath.dirVeg, 'runs', run_name)
+        run_name_details = f'{run_name}_{method}_{embedding_size}_{dropout}_{learning_rate}_{seed}'
+        save_path = os.path.join(kPath.dirVeg, 'runs', run_name_details)
         print(save_path)
         if os.path.exists(save_path):
-            raise Exception(f"run_name {run_name} already exists!")
+            raise Exception(f"run_name {run_name_details} already exists!")
     
     for i, (method, seed, dropout, embedding_size, learning_rate) in enumerate(hyperparam_combos):
-        run_name = f'{run_name}_{method}_{embedding_size}_{dropout}_{learning_rate}_{seed}'
-        print('Combo', i, 'run_name', run_name)
+        run_name_details = f'{run_name}_{method}_{embedding_size}_{dropout}_{learning_rate}_{seed}'
+        print('Combo', i, 'run_name', run_name_details)
         for fold in range(5):
             train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
             cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
@@ -105,7 +107,7 @@ def main(args):
             cmd_line += f' --epochs {epochs} --satellites no_landsat --wandb_name {wandb_name}'
             cmd_line += f' --split_version {split_version} --dataset {dataset} --cross_val {cross_val} --test_epoch {test_epoch} --fold {fold}'
             print(' Submitted fold', fold)
-            submitJob(run_name, cmd_line)
+            # submitJob(run_name, cmd_line)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train model")
