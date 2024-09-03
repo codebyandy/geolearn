@@ -1,19 +1,27 @@
 from hydroDL import kPath
-from clean_runs_dir import delete_crashed_subdirs
 
 from itertools import product
 import argparse
 import os
 
-DEFAULT_METHODS = ["cherry"]
-DEFAULT_SEEDS = [0, 1, 2]
-DEFAULT_DROPOUTS = [0.6]
-DEFAULT_EMBEDDING_SIZES = [64]
-DEFAULT_BATCH_SIZES = [500]
-DEFAULT_OPTIMIZERS = ["adam"]
-DEFAULT_LEARNING_RATES = [0.01]
-DEFAULT_ITERS_PER_EPOCH = [20]
-DEFAULT_SCHED_START_EPOCHS = [200]
+
+DEFAULT_METHODS = 'cherry'
+DEFAULT_SEEDS = '0,1,2'
+DEFAULT_DROPOUTS = '0.4,0.6'
+DEFAULT_EMBEDDING_SIZES = '32,64'
+DEFAULT_LEARNING_RATES = '0.01'
+
+
+def str_to_lst(str, type):
+    if type == 'int':
+        return [int(s) for s in str.strip().split(',')]
+    elif type ==  'float':
+        return [float(s) for s in str.strip().split(',')]
+    elif type == 'str':
+        return [s for s in str.strip().split(',')]
+    else:
+        raise Exception(f"str_to_lst does not suppor type {type}.")
+
 
 def submitJob(jobName, cmdLine, nH=24, nM=16):
     jobFile = os.path.join(kPath.dirJob, jobName)
@@ -57,61 +65,66 @@ def submitJobGPU(jobName, cmdLine, nH=24, nM=16):
         fh.writelines(cmdLine)
     os.system('sbatch {}'.format(jobFile))
 
-def main(args):
-    # parent_directory = os.path.join(kPath.dirVeg, "runs")
-    # delete_crashed_subdirs(parent_directory)
 
-    methods_lst = args.methods
-    seeds_lst = args.seeds
-    dropouts_lst = args.dropouts
-    embedding_sizes_lst = args.embedding_sizes
-    batch_sizes_lst = args.batch_sizes
-    optimizers_lst = args.optimizers
-    learning_rates_lst = [args.learning_rate]
-    iters_per_epoch_lst = args.iters_per_epoch
-    sched_start_epochs_lst = args.sched_start_epochs
+def main(args):
+    methods_lst = str_to_lst(args.methods, 'str')
+    seeds_lst = str_to_lst(args.seeds, 'int')
+    dropouts_lst = str_to_lst(args.dropouts, 'float')
+    embedding_sizes_lst = str_to_lst(args.embedding_sizes, 'int')
+    learning_rates_lst = str_to_lst(args.learning_rates, 'float')
+
     wandb_name = args.wandb_name
-    note = args.note
+    run_name = args.run_name
     split_version = args.split_version
     dataset = args.dataset
     cross_val = args.cross_val
     test_epoch = args.test_epoch
 
-    hyperparam_combos = list(product(methods_lst, seeds_lst, dropouts_lst, embedding_sizes_lst, batch_sizes_lst, \
-                                     optimizers_lst, learning_rates_lst, iters_per_epoch_lst, sched_start_epochs_lst))
+    batch_size = args.batch_size
+    optimizer = args.optimizer
+    iters_per_epoch = args.iters_per_epoch
+    sched_start_epoch = args.sched_start_epoch
+    epochs = args.epochs
 
-    for i, (method, seed, dropout, embedding_size, batch_size, optimizer, learning_rate, iters_per_epoch, sched_start_epoch) in enumerate(hyperparam_combos):
-        if note:
-            run_name = f'{note}_{embedding_size}_{dropout}_{seed}'
-        else:
-            run_name = f'{embedding_size}_{dropout}_{seed}'
-        train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
-        cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
-        cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
-        cmd_line += f' --epochs 500 --satellites no_landsat --wandb_name {wandb_name}'
-        cmd_line += f' --split_version {split_version} --dataset {dataset} --cross_val {cross_val} --test_epoch {test_epoch}'
-        
-        print(i, cmd_line)
-        submitJob(run_name, cmd_line)
+    hyperparam_combos = list(product(methods_lst, seeds_lst, dropouts_lst, embedding_sizes_lst, learning_rates_lst))
+    
+    for i, (method, seed, dropout, embedding_size, learning_rate) in enumerate(hyperparam_combos):
+        run_name = f'{run_name}_{method}_{embedding_size}_{dropout}_{learning_rate}_{seed}'
+        save_path = os.path.join(kPath.dirVeg, 'runs', run_name)
+        print(save_path)
+        if os.path.exists(save_path):
+            raise Exception(f"run_name {run_name} already exists!")
+    
+    for i, (method, seed, dropout, embedding_size, learning_rate) in enumerate(hyperparam_combos):
+        run_name = f'{run_name}_{method}_{embedding_size}_{dropout}_{learning_rate}_{seed}'
+        print('Combo', i, 'run_name', run_name)
+        for fold in range(5):
+            train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
+            cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
+            cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
+            cmd_line += f' --epochs {epochs} --satellites no_landsat --wandb_name {wandb_name}'
+            cmd_line += f' --split_version {split_version} --dataset {dataset} --cross_val {cross_val} --test_epoch {test_epoch} --fold {fold}'
+            print(' Submitted fold', fold)
+            # submitJob(run_name, cmd_line)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train model")
-    parser.add_argument("--methods", type=list, default=DEFAULT_METHODS)
-    parser.add_argument("--seeds", type=list, default=DEFAULT_SEEDS)
-    parser.add_argument("--dropouts", type=list, default=DEFAULT_DROPOUTS)
-    # parser.add_argument("--embedding_sizes", type=list, default=DEFAULT_EMBEDDING_SIZES)
-    parser.add_argument("--embedding_sizes", type=list, default=DEFAULT_EMBEDDING_SIZES)
-    parser.add_argument("--batch_sizes", type=list, default=DEFAULT_BATCH_SIZES)
-    parser.add_argument("--optimizers", type=list, default=DEFAULT_OPTIMIZERS)
-    parser.add_argument("--learning_rate", type=float, default=0.01)
-    parser.add_argument("--iters_per_epoch", type=list, default=DEFAULT_ITERS_PER_EPOCH)
-    parser.add_argument("--sched_start_epochs", type=list, default=DEFAULT_SCHED_START_EPOCHS)
+    parser.add_argument("--methods", default=DEFAULT_METHODS)
+    parser.add_argument("--seeds", default=DEFAULT_SEEDS)
+    parser.add_argument("--dropouts", default=DEFAULT_DROPOUTS)
+    parser.add_argument("--embedding_sizes", default=DEFAULT_EMBEDDING_SIZES)
+    parser.add_argument("--batch_size", default=500)
+    parser.add_argument("--optimizer", default='adam')
+    parser.add_argument("--learning_rates", default=DEFAULT_LEARNING_RATES)
+    parser.add_argument("--iters_per_epoch", default=20)
+    parser.add_argument("--sched_start_epoch", default=200)
     parser.add_argument("--wandb_name", type=str, required=True)
-    parser.add_argument("--note", type=str, default="")
-    parser.add_argument("--split_version", type=str)
-    parser.add_argument("--dataset", type=str)
+    parser.add_argument("--run_name", type=str, default="")
+    parser.add_argument("--split_version", type=str, default='stratified', choices=["dataset", "stratified"])
+    parser.add_argument("--dataset", type=str, default="singleDaily-modisgrid-new-const")
     parser.add_argument("--cross_val", type=bool, default=True)
     parser.add_argument("--test_epoch", type=int, default=50)
+    parser.add_argument("--epochs", type=int, default=500)
     args = parser.parse_args()
 
     main(args)
