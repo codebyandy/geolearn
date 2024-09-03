@@ -107,8 +107,8 @@ def main(args):
             cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
             cmd_line += f' --epochs {epochs} --satellites no_landsat --wandb_name {wandb_name}'
             cmd_line += f' --split_version {split_version} --dataset {dataset} --cross_val {cross_val} --test_epoch {test_epoch} --fold {fold}'
-            print(' Submitted fold', fold)
             submitJob(run_name, cmd_line)
+            print(' Submitted fold', fold)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train model")
