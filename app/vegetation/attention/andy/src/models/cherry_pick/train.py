@@ -266,25 +266,3 @@ if __name__ == "__main__":
 
     train(args, fold_save_path, run_details)
     
-
-
-
-
-
-    # run_details = {
-    #     "date": datetime.today().strftime('%Y-%m-%d'),
-    #     "run_name": run_name,
-    #     "fold": fold,
-    #     "training_method": "cherry_picking",
-    #     "rho": rho,
-    #     "embedding_size": nh,
-    #     "epochs": epochs,
-    #     "learning_rate": learning_rate,
-    #     "iterations_per_epoch": nIterEp,
-    #     "schedule_start_epoch": sched_start_epoch,
-    #     "optimizer": optimizer,
-    #     "dropout": dropout,
-    #     "batch_size": batch_size,
-    #     "test_epoch": test_epoch,
-    #     "satellites": satellites
-    # }

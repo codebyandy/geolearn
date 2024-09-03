@@ -106,7 +106,7 @@ def main(args):
             cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
             cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
             cmd_line += f' --epochs {epochs} --satellites no_landsat --wandb_name {wandb_name}'
-            cmd_line += f' --split_version {split_version} --dataset {dataset} --cross_val {cross_val} --test_epoch {test_epoch} --fold {fold}'
+            cmd_line += f' --split_version {split_version} --dataset {dataset} --test_epoch {test_epoch} --fold {fold}'
             submitJob(run_name, cmd_line)
             print(' Submitted fold', fold)
 
@@ -125,7 +125,6 @@ if __name__ == "__main__":
     parser.add_argument("--run_name", type=str, default="")
     parser.add_argument("--split_version", type=str, default='stratified', choices=["dataset", "stratified"])
     parser.add_argument("--dataset", type=str, default="singleDaily-modisgrid-new-const")
-    parser.add_argument("--cross_val", type=bool, default=True)
     parser.add_argument("--test_epoch", type=int, default=50)
     parser.add_argument("--epochs", type=int, default=500)
     args = parser.parse_args()
