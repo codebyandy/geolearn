@@ -102,7 +102,7 @@ def main(args):
         print('Combo', i, 'run_name', run_name_details)
         for fold in range(5):
             train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
-            cmd_line = f'python {train_path} --run_name {run_name} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
+            cmd_line = f'python {train_path} --run_name {run_name_details} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
             cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
             cmd_line += f' --epochs {epochs} --satellites no_landsat --wandb_name {wandb_name}'
             cmd_line += f' --split_version {split_version} --dataset {dataset} --test_epoch {test_epoch} --fold {fold}'
