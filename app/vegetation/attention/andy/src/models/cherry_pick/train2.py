@@ -125,16 +125,16 @@ def train(args, saveFolder, fold):
             optimizer.step()
     
             # Get iteration training metrics
-            metrics["train_loss"] += loss.item()
+            metrics["train_minibatch_loss"] += loss.item()
             with torch.no_grad():
                 obs, pred = yP.detach().numpy(), yT.detach().numpy()
                 rmse = np.sqrt(np.mean((obs - pred) ** 2))
                 corrcoef = np.corrcoef(obs, pred)[0, 1]
                 coef_det = r2_score(obs, pred)
 
-                metrics["train_RMSE"]+= rmse
-                metrics["train_rsq"] += corrcoef
-                metrics["train_Rsq"] += coef_det
+                metrics["train_minibatch_rmse"]+= rmse
+                metrics["train_minibatch_corrcoef"] += corrcoef
+                metrics["train_minibatch_coefdet"] += coef_det
 
             iteration_end = time.time()
             iteration_wall_times.append(iteration_end - iteration_start)
