@@ -130,7 +130,7 @@ if __name__ == "__main__":
     parser.add_argument("--test_epoch", type=int, default=50)
     parser.add_argument("--epochs", type=int, default=500)
     parser.add_argument("--folds", default=DEFAULT_FOLDS)
-    parser.add_argument("--protection", type=bool, default=True)
+    parser.add_argument('--protection', action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
 
     main(args)
