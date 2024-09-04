@@ -117,7 +117,11 @@ def train(args, saveFolder, fold):
             # else:
             #     xTup = (xS, xL, xM)
             #     pTup = (pS, pL, pM) 
-            yP = model(xTup, pTup, xcT, lTup)      
+            yP = model(xTup, pTup, xcT, lTup)  
+
+            if ep >= 50 and i == nIterEp - 1:
+                pdb.set_trace()
+
             loss = loss_fn(yP, yT)
             loss.backward()
       
@@ -276,7 +280,9 @@ if __name__ == "__main__":
     set_seed(args.seed)
     
     # create save dir to save hyperparameters, metrics, models, time cost
-    save_path = ''
+    fold_save_path = ''
+    run_details = {}
+
     if not args.testing:
         save_path = os.path.join(kPath.dirVeg, 'runs', f'{args.run_name}')
         run_details_path = os.path.join(save_path, 'details.json')
