@@ -1,4 +1,5 @@
-python helpers/submitJob.py --wandb_name debugging --run_name modisgrid-new-const --split_version dataset --dataset singleDaily-modisgrid-new-const --seeds 0 --folds 0,4 --no-protection
-python helpers/submitJob.py --wandb_name debugging --run_name modisgrid-new-const --split_version dataset --dataset singleDaily-modisgrid-new-const --seeds 1 --folds 1 --no-protection
-python helpers/submitJob.py --wandb_name debugging --run_name modisgrid-new-const --split_version dataset --dataset singleDaily-modisgrid-new-const --seeds 2 --folds 1 --no-protection
-python helpers/submitJob.py --wandb_name debugging --run_name modisgrid-new-const-strat --split_version stratified --dataset singleDaily-modisgrid-new-const --seeds 2 --folds 3 --no-protection
+pthon helpers/submitJob.py --wandb_name debugging --run_name modisgrid-new-const --split_version dataset --dataset singleDaily-modisgrid-new-const 
+python helpers/submitJob.py --wandb_name debugging --run_name modisgrid-new-const-strat --split_version stratified --dataset singleDaily-modisgrid-new-const 
+
+pthon helpers/submitJob.py --wandb_name debugging --run_name nadgrid --split_version dataset --dataset singleDaily-nadgrid 
+python helpers/submitJob.py --wandb_name debugging --run_name nadgrid-strat --split_version stratified --dataset singleDaily-nadgrid 
