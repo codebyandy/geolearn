@@ -13,6 +13,7 @@ DEFAULT_SEEDS = '0,1,2'
 DEFAULT_DROPOUTS = '0.6'
 DEFAULT_EMBEDDING_SIZES = '64'
 DEFAULT_LEARNING_RATES = '0.01'
+DEFAULT_FOLDS = '0,1,2,3,4'
 
 
 def str_to_lst(str, type):
@@ -75,6 +76,7 @@ def main(args):
     dropouts_lst = str_to_lst(args.dropouts, 'float')
     embedding_sizes_lst = str_to_lst(args.embedding_sizes, 'int')
     learning_rates_lst = str_to_lst(args.learning_rates, 'float')
+    folds_lst = str_to_lst(args.folds, 'int')
 
     wandb_name = args.wandb_name
     run_name = args.run_name
@@ -90,24 +92,25 @@ def main(args):
 
     hyperparam_combos = list(product(methods_lst, seeds_lst, dropouts_lst, embedding_sizes_lst, learning_rates_lst))
     
-    for i, (method, seed, dropout, embedding_size, learning_rate) in enumerate(hyperparam_combos):
-        run_name_details = f'{run_name}_{method}_{embedding_size}_{dropout}_{learning_rate}_{seed}'
-        save_path = os.path.join(kPath.dirVeg, 'runs', run_name_details)
-        print(save_path)
-        if os.path.exists(save_path):
-            raise Exception(f"run_name {run_name_details} already exists!")
-    
+    if args.protection:
+        for i, (method, seed, dropout, embedding_size, learning_rate) in enumerate(hyperparam_combos):
+            run_name_details = f'{run_name}_{method}_{embedding_size}_{dropout}_{learning_rate}_{seed}'
+            save_path = os.path.join(kPath.dirVeg, 'runs', run_name_details)
+            print(save_path)
+            if os.path.exists(save_path):
+                raise Exception(f"run_name {run_name_details} already exists!")
+
     for i, (method, seed, dropout, embedding_size, learning_rate) in enumerate(hyperparam_combos):
         run_name_details = f'{run_name}_{method}_{embedding_size}_{dropout}_{learning_rate}_{seed}'
         print('Combo', i, 'run_name', run_name_details)
-        for fold in range(5):
+        for fold in folds_lst:
             train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
             cmd_line = f'python {train_path} --run_name {run_name_details} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
             cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
             cmd_line += f' --epochs {epochs} --satellites no_landsat --wandb_name {wandb_name}'
-            cmd_line += f' --split_version {split_version} --dataset {dataset} --test_epoch {test_epoch} --fold {fold}'
-            submitJob(run_name, cmd_line)
-            print(' Submitted fold', fold)
+            cmd_line += f' --split_version {split_version} --dataset {dataset} --test_epoch {test_epoch} --fold {fold} --epochs {epochs}'
+            # submitJob(run_name, cmd_line)
+            print('Submitted fold', fold)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train model")
@@ -126,6 +129,8 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str, default="singleDaily-modisgrid-new-const")
     parser.add_argument("--test_epoch", type=int, default=50)
     parser.add_argument("--epochs", type=int, default=500)
+    parser.add_argument("--folds", default=DEFAULT_FOLDS)
+    parser.add_argument("--protection", type=bool, default=True)
     args = parser.parse_args()
 
     main(args)
