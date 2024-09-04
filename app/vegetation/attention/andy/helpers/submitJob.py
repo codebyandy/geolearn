@@ -109,7 +109,7 @@ def main(args):
             cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
             cmd_line += f' --epochs {epochs} --satellites no_landsat --wandb_name {wandb_name}'
             cmd_line += f' --split_version {split_version} --dataset {dataset} --test_epoch {test_epoch} --fold {fold} --epochs {epochs}'
-            # submitJob(run_name, cmd_line)
+            submitJob(run_name, cmd_line)
             print('Submitted fold', fold)
 
 if __name__ == "__main__":
