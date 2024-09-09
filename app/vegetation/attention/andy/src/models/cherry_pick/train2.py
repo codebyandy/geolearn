@@ -3,8 +3,8 @@ This file is for training the transformer model for LFMC prediction.
 """
 
 from model import FinalModel
-from data import randomSubset, prepare_data
-from inference import test_metrics, train_metrics
+from data2 import randomSubset, prepare_data
+# from inference import test_metrics, train_metrics
 from utils import set_seed
 
 # hydroDL module by Kuai Fang
@@ -34,7 +34,7 @@ import time
 import pdb
 
 
-def train(args, saveFolder, fold):
+def train(args, saveFolder, run_details):
     nh = args.nh
     epochs = args.epochs
     learning_rate = args.learning_rate
@@ -90,11 +90,10 @@ def train(args, saveFolder, fold):
     epoch_wall_times = []
     iteration_wall_times = []
     test_wall_times = []
-
-    model.train()
     
-    for ep in range(epochs):
+    for ep in range(1, epochs + 1):
         epoch_start = time.time()
+        model.train()
         
         lossEp = 0
         metrics = {
@@ -103,10 +102,10 @@ def train(args, saveFolder, fold):
             "train_minibatch_corrcoef" : 0,
             "train_minibatch_coefdet" : 0
         }
-
-        for i in range(nIterEp):
+        
+        for _ in range(nIterEp):
             iteration_start = time.time()
-            model.zero_grad()
+            optimizer.zero_grad()
             
             # One training iteration
             xS, xM, pS, pM, xcT, yT = randomSubset(data, split_indicies["train"] , split_indicies["test_quality"] , 'train', batch_size)
@@ -117,127 +116,84 @@ def train(args, saveFolder, fold):
             # else:
             #     xTup = (xS, xL, xM)
             #     pTup = (pS, pL, pM) 
-            yP = model(xTup, pTup, xcT, lTup)  
-
-            if ep >= 50 and i == nIterEp - 1:
-                pdb.set_trace()
-
+            yP = model(xTup, pTup, xcT, lTup)      
             loss = loss_fn(yP, yT)
-            loss.backward()
-      
+            loss.backward() # backpropagation
+            optimizer.step() # update weights
+
             lossEp += loss.item()
-            optimizer.step()
     
-            # Get iteration training metrics
+            # Get iteration training metrics        
+            obs, pred = yP.detach().numpy(), yT.detach().numpy()
+            rmse = np.sqrt(np.mean((obs - pred) ** 2))
+            corrcoef = np.corrcoef(obs, pred)[0, 1]
+            coef_det = r2_score(obs, pred)
             metrics["train_minibatch_loss"] += loss.item()
-            with torch.no_grad():
-                obs, pred = yP.detach().numpy(), yT.detach().numpy()
-                rmse = np.sqrt(np.mean((obs - pred) ** 2))
-                corrcoef = np.corrcoef(obs, pred)[0, 1]
-                coef_det = r2_score(obs, pred)
+            metrics["train_minibatch_rmse"]+= rmse
+            metrics["train_minibatch_corrcoef"] += corrcoef
+            metrics["train_minibatch_coefdet"] += coef_det
 
-                metrics["train_minibatch_rmse"]+= rmse
-                metrics["train_minibatch_corrcoef"] += corrcoef
-                metrics["train_minibatch_coefdet"] += coef_det
-
-            iteration_end = time.time()
-            iteration_wall_times.append(iteration_end - iteration_start)
+            iteration_wall_times.append(time.time() - iteration_start)
 
         metrics = {metric : sum / nIterEp for metric, sum in metrics.items()}
-        optimizer.zero_grad()
+        # optimizer.zero_grad()
 
-        # # Get metrics on subset of test set at the end of every epoch
-        # xS, xM, pS, pM, xcT, yT = randomSubset(data, split_indicies["train"] , split_indicies["test_quality"], 'test', batch_size)
-        # xTup, pTup = (), ()
-        # if satellites == "no_landsat":
-        #     xTup = (xS, xM)
-        #     pTup = (pS, pM)
-        # # else:
-        # #     xTup = (xS, xL, xM)
-        # #     pTup = (pS, pL, pM)  
-        # yP = model(xTup, pTup, xcT, lTup)
-        # loss = loss_fn(yP, yT)
-    
-        # metrics["test_loss"] = loss_fn(yP, yT).item()
-        # obs, pred = yP.detach().numpy(), yT.detach().numpy()
-        # rmse = np.sqrt(np.mean((obs - pred) ** 2))
-        # corrcoef = np.corrcoef(obs, pred)[0, 1]
-        # coef_det = r2_score(obs, pred)
-
-        # with torch.no_grad():
-        #     metrics["test_RMSE"]= rmse
-        #     metrics["test_rsq"] = corrcoef
-        #     metrics["test_Rsq"] = coef_det
-        
         if ep > sched_start_epoch:
             scheduler.step()
 
-        epoch_end = time.time()
-        epoch_wall_times.append(epoch_end - epoch_start)
+        epoch_wall_times.append(time.time() - epoch_start)
 
-        print(
-            '{} {:.3f} {:.3f} {:.3f}'.format(
-                ep, lossEp / nIterEp, loss.item(), corrcoef
-            )
-        )
+        print('{} {:.3f} {:.3f} {:.3f}'.format(ep, lossEp / nIterEp, loss.item(), corrcoef))
 
         # Get metrics on full test set every `test_epoch`
         if ep > 0 and ep % test_epoch == 0:
+            test_start = time.time() 
             print("testing on full test set") 
-            test_start = time.time()
-
-            config = {"model" : model, "satellites" : satellites, "epoch" : ep}
-            full_test_metrics = test_metrics(data, split_indicies, config)
-            full_test_metrics_floats = {k : v[0] for k, v in full_test_metrics.items()}
-            metrics.update(full_test_metrics_floats)
             
-            if not args.testing:
-                # Update sheet with (epoch, metrics) for this run
-                new_metrics = pd.DataFrame(full_test_metrics)
-                metrics_path = os.path.join(saveFolder, 'metrics.csv')
-                if os.path.exists(metrics_path):
-                    prev_metrics = pd.read_csv(metrics_path)
-                    new_metrics = pd.concat([prev_metrics, new_metrics])   
-                new_metrics.to_csv(os.path.join(saveFolder, 'metrics.csv'), index=False)
-                torch.save(model.state_dict(), os.path.join(saveFolder, f'model_ep{ep}.pth'))
+            model.eval()
+            with torch.no_grad():
+                config = {"model" : model, "satellites" : satellites, "epoch" : ep}
+                full_test_metrics = test_metrics(data, split_indicies, config)
+                full_test_metrics_floats = {k : v[0] for k, v in full_test_metrics.items()}
+                metrics.update(full_test_metrics_floats)
+            
+                if not args.testing:
+                    # Update sheet with (epoch, metrics) for this run
+                    new_metrics = pd.DataFrame(full_test_metrics)
+                    metrics_path = os.path.join(saveFolder, 'metrics.csv')
+                    if os.path.exists(metrics_path):
+                        prev_metrics = pd.read_csv(metrics_path)
+                        new_metrics = pd.concat([prev_metrics, new_metrics])   
+                    new_metrics.to_csv(os.path.join(saveFolder, 'metrics.csv'), index=False)
+                    torch.save(model.state_dict(), os.path.join(saveFolder, f'model_ep{ep}.pth'))
 
-            test_end = time.time()
-            test_wall_times.append(test_end - test_start)
+            test_wall_times.append(time.time() - test_start)
 
         if not args.testing:
             wandb.log(metrics)
 
     if not args.testing:
-        # Save mean wall times
+        # (6) Save mean wall times
         time_path = os.path.join(saveFolder, 'time.csv')
-        mean_epoch_time = np.mean(epoch_wall_times)
-        mean_iteration_time = np.mean(iteration_wall_times)
-        mean_test_time = np.mean(test_wall_times)
         time_data = {
-            'mean_epoch_time': [mean_epoch_time],
-            'mean_iteration_time': [mean_iteration_time],
-            'mean_test_time': [mean_test_time]
+            'mean_epoch_time': [np.mean(epoch_wall_times)],
+            'mean_iteration_time': [np.mean(iteration_wall_times)],
+            'mean_test_time': [np.mean(test_wall_times)]
         }
         time_df = pd.DataFrame(time_data)
         time_df.to_csv(time_path, index=False)
 
+        # (7) Update sheet containing all runs and best metrics
         metrics_path = os.path.join(saveFolder, 'metrics.csv')
         metrics = pd.read_csv(metrics_path)
 
         reported_metrics = metrics.iloc[-1]
-        # old_reported_model_path = os.path.join(saveFolder, f'model_ep{int(reported_metrics.epoch)}.pth')
-        # new_reported_model_path = os.path.join(saveFolder, 'best_model.pth')
-        # shutil.copyfile(old_reported_model_path, new_reported_model_path)
-
-        # Update sheet containing all runs and best metrics
-        run_details.update(time_data)
-        run_details.update(reported_metrics)
-
         config = {"model" : model, "satellites" : satellites, "epoch" : ep}
         full_train_metrics = train_metrics(data, split_indicies, config)
-        # full_train_metrics_floats = {k : v[0] for k, v in full_train_metrics.items()}
-        run_details.update(full_train_metrics)
 
+        run_details.update(time_data)
+        run_details.update(reported_metrics)
+        run_details.update(full_train_metrics)
         run_details = pd.DataFrame(run_details)
 
         all_run_details_path = os.path.join(kPath.dirVeg, 'runs', 'best_metrics_all_runs.csv')
@@ -280,9 +236,7 @@ if __name__ == "__main__":
     set_seed(args.seed)
     
     # create save dir to save hyperparameters, metrics, models, time cost
-    fold_save_path = ''
-    run_details = {}
-
+    save_path = ''
     if not args.testing:
         save_path = os.path.join(kPath.dirVeg, 'runs', f'{args.run_name}')
         run_details_path = os.path.join(save_path, 'details.json')

@@ -82,7 +82,7 @@ bM = 10
         #     yP = model(xTup, pTup, xcT, lTup)
         #     loss = loss_fn(yP, yT)
         
-        #     obs, pred = yP.detach().numpy(), yT.detach().numpy()
+        #     obs, pred = yP.detasch().numpy(), yT.detach().numpy()
         #     rmse = np.sqrt(np.mean((obs - pred) ** 2))
         #     corrcoef = np.corrcoef(obs, pred)[0, 1]
         #     coef_det = r2_score(obs, pred)

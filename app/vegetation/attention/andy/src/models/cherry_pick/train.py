@@ -4,14 +4,10 @@ This file is for training the transformer model for LFMC prediction.
 
 from model import FinalModel
 from data import randomSubset, prepare_data
-from inference import test_metrics, train_metrics
+from inference import update_metrics_dict, get_metrics
 from utils import set_seed
 
-# hydroDL module by Kuai Fang
-from hydroDL.data import dbVeg
-from hydroDL.data import DataModel
-from hydroDL.master import dataTs2Range
-from hydroDL import kPath
+from hydroDL import kPath # module by Kuai Fang
 
 import torch.optim.lr_scheduler as lr_scheduler
 import torch.optim as optim
@@ -19,16 +15,11 @@ from torch import nn
 import torch
 import numpy as np
 import pandas as pd
-
-from sklearn.metrics import r2_score
 import wandb
 
-from datetime import datetime
 import json
 import os
 import argparse
-import shutil
-import random
 import time
 
 import pdb
@@ -44,40 +35,28 @@ def train(args, saveFolder, run_details):
     dropout = args.dropout
     batch_size = args.batch_size
     test_epoch = args.test_epoch
-    satellites = args.satellites
     split_version = args.split_version
     fold = args.fold
 
-    # (1) Store all required data in `data` tuple
+    # Store all required data in `data` dictionary
     data = prepare_data(args.dataset, args.rho)
-    df, dm, iInd, jInd, nMat, pSLst, pMLst, x, rho, xc, yc = data # TODO: Clean up or define in README
 
-    # (2) Load previously generated dataet splits
-    data_path = os.path.join(kPath.dirVeg, 'model', 'attention', split_version)
-    splits_path = os.path.join(data_path, 'subset.json')
-
+    # Load previously generated dataset splits
+    splits_path = os.path.join(kPath.dirVeg, 'model', 'attention', split_version, 'subset.json')
     with open(splits_path) as f:
         splits_dict = json.load(f)
-    
-    split_indicies = {}
-    split_indicies["train"] = splits_dict[f'trainInd_k{fold}5']
-    split_indicies["test_quality"] = splits_dict[f'testInd_k{fold}5']
-    split_indicies["test_poor"] = splits_dict['testInd_underThresh']
+    split_indicies = {
+        'train' : splits_dict[f'trainInd_k{fold}5'],
+        'test_quality_sites' : splits_dict[f'testInd_k{fold}5'],
+        'test_poor_sites' : splits_dict['testInd_underThresh']
+    }
 
-    # (3) Get a random subset to get important shapes
-    xS, xM, pS, pM, xcT, yT = randomSubset(data, split_indicies["train"], split_indicies["test_quality"], 'train', batch_size)
-    nTup, lTup = (), () # nTup (list[int]): Number of input features for each remote sensing source (i.e. Sentinel, Modis) 
-                        # lTup (tuple[int]): number of sampled days for each remote sensing source
-    if satellites == "no_landsat":
-        print("no landsat model")
-        nTup = (xS.shape[-1], xM.shape[-1])
-        lTup = (xS.shape[1], xM.shape[1])
-    # else:
-    #     nTup = (xS.shape[-1], xL.shape[-1], xM.shape[-1])
-    #     lTup = (xS.shape[1], xL.shape[1], xM.shape[1])
-    nxc = xc.shape[-1] # nxc (int): Number of constant variables
+    # Set up model 
+    xS, xM, pS, pM, xcT, yT = randomSubset(data, split_indicies["train"], batch_size) # Get sample to get shapes for model
+    nTup = (xS.shape[-1], xM.shape[-1]) # (list[int]) Number of input features for each remote sensing source (i.e. Sentinel, Modis) 
+    lTup = (xS.shape[1], xM.shape[1]) # (tuple[int]) number of sampled days for each remote sensing source
+    nxc = data['xc'].shape[-1] # (int): number of constant variables
     
-    # (4) Set up model
     model = FinalModel(nTup, nxc, nh, dropout)
     loss_fn = nn.L1Loss(reduction='mean')
     if optimizer == "adam":
@@ -86,7 +65,7 @@ def train(args, saveFolder, run_details):
         optimizer = optim.SGD(model.parameters(), lr=learning_rate)    
     scheduler = lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.01, total_iters=800)
     
-    # (5) Training loop
+    # Training loop
     epoch_wall_times = []
     iteration_wall_times = []
     test_wall_times = []
@@ -95,12 +74,11 @@ def train(args, saveFolder, run_details):
         epoch_start = time.time()
         model.train()
         
-        lossEp = 0
         metrics = {
-            "train_minibatch_loss" : 0,
-            "train_minibatch_rmse" : 0,
-            "train_minibatch_corrcoef" : 0,
-            "train_minibatch_coefdet" : 0
+            "train_epochmean_loss" : 0,
+            "train_epochmean_rmse" : 0,
+            "train_epochmean_corrcoef" : 0,
+            "train_epochmean_coefdet" : 0
         }
         
         for _ in range(nIterEp):
@@ -108,63 +86,55 @@ def train(args, saveFolder, run_details):
             optimizer.zero_grad()
             
             # One training iteration
-            xS, xM, pS, pM, xcT, yT = randomSubset(data, split_indicies["train"] , split_indicies["test_quality"] , 'train', batch_size)
-            xTup, pTup = (), ()
-            if satellites == "no_landsat":
-                xTup = (xS, xM)
-                pTup = (pS, pM)
-            # else:
-            #     xTup = (xS, xL, xM)
-            #     pTup = (pS, pL, pM) 
+            xS, xM, pS, pM, xcT, yT = randomSubset(data, split_indicies["train"], batch_size)
+            xTup = (xS, xM)
+            pTup = (pS, pM)
+     
             yP = model(xTup, pTup, xcT, lTup)      
             loss = loss_fn(yP, yT)
             loss.backward() # backpropagation
             optimizer.step() # update weights
-
-            lossEp += loss.item()
     
-            # Get iteration training metrics        
-            obs, pred = yP.detach().numpy(), yT.detach().numpy()
-            rmse = np.sqrt(np.mean((obs - pred) ** 2))
-            corrcoef = np.corrcoef(obs, pred)[0, 1]
-            coef_det = r2_score(obs, pred)
-            metrics["train_minibatch_loss"] += loss.item()
-            metrics["train_minibatch_rmse"]+= rmse
-            metrics["train_minibatch_corrcoef"] += corrcoef
-            metrics["train_minibatch_coefdet"] += coef_det
+            # Get iteration training metrics      
+            minibatch_metrics = get_metrics(yP.detach().numpy(), yT.detach().numpy())
+            metrics['train_epochmean_loss'] += loss.item()
+            metrics['train_epochmean_rmse']+= minibatch_metrics['rmse']
+            metrics['train_epochmean_corrcoef'] += minibatch_metrics['corrcoef']
+            metrics['train_epochmean_coefdet'] += minibatch_metrics['coefdet']
 
             iteration_wall_times.append(time.time() - iteration_start)
-
-        metrics = {metric : sum / nIterEp for metric, sum in metrics.items()}
-        # optimizer.zero_grad()
 
         if ep > sched_start_epoch:
             scheduler.step()
 
+        metrics = {metric : sum / nIterEp for metric, sum in metrics.items()}
+        print('Epoch: {} | Loss: {:.3f} Coefdet: {:.3f}'.format(ep, \
+                                                                metrics['train_epochmean_loss'], \
+                                                                metrics['train_epochmean_coefdet']))
+        
         epoch_wall_times.append(time.time() - epoch_start)
-
-        print('{} {:.3f} {:.3f} {:.3f}'.format(ep, lossEp / nIterEp, loss.item(), corrcoef))
 
         # Get metrics on full test set every `test_epoch`
         if ep > 0 and ep % test_epoch == 0:
             test_start = time.time() 
-            print("testing on full test set") 
+            print("Testing on full test set") 
             
             model.eval()
             with torch.no_grad():
-                config = {"model" : model, "satellites" : satellites, "epoch" : ep}
-                full_test_metrics = test_metrics(data, split_indicies, config)
-                full_test_metrics_floats = {k : v[0] for k, v in full_test_metrics.items()}
-                metrics.update(full_test_metrics_floats)
+                test_metrics = {}
+                update_metrics_dict(test_metrics, data, split_indicies['test_quality_sites'], model, 'qual')
+                update_metrics_dict(test_metrics, data, split_indicies['test_poor_sites'], model, 'poor')
+                metrics.update(test_metrics)
             
                 if not args.testing:
                     # Update sheet with (epoch, metrics) for this run
-                    new_metrics = pd.DataFrame(full_test_metrics)
+                    test_metrics.update({'epoch' : [ep]})
+                    new_test_metrics_df = pd.DataFrame(test_metrics)
                     metrics_path = os.path.join(saveFolder, 'metrics.csv')
                     if os.path.exists(metrics_path):
-                        prev_metrics = pd.read_csv(metrics_path)
-                        new_metrics = pd.concat([prev_metrics, new_metrics])   
-                    new_metrics.to_csv(os.path.join(saveFolder, 'metrics.csv'), index=False)
+                        prev_test_metrics_df = pd.read_csv(metrics_path)
+                        new_test_metrics_df = pd.concat([prev_test_metrics_df, new_test_metrics_df])   
+                    new_test_metrics_df.to_csv(os.path.join(saveFolder, 'metrics.csv'), index=False)
                     torch.save(model.state_dict(), os.path.join(saveFolder, f'model_ep{ep}.pth'))
 
             test_wall_times.append(time.time() - test_start)
@@ -173,7 +143,7 @@ def train(args, saveFolder, run_details):
             wandb.log(metrics)
 
     if not args.testing:
-        # (6) Save mean wall times
+        # Save mean wall times
         time_path = os.path.join(saveFolder, 'time.csv')
         time_data = {
             'mean_epoch_time': [np.mean(epoch_wall_times)],
@@ -183,44 +153,42 @@ def train(args, saveFolder, run_details):
         time_df = pd.DataFrame(time_data)
         time_df.to_csv(time_path, index=False)
 
-        # (7) Update sheet containing all runs and best metrics
-        metrics_path = os.path.join(saveFolder, 'metrics.csv')
-        metrics = pd.read_csv(metrics_path)
-
-        reported_metrics = metrics.iloc[-1]
-        config = {"model" : model, "satellites" : satellites, "epoch" : ep}
-        full_train_metrics = train_metrics(data, split_indicies, config)
-
+        # Update sheet containing all runs and best metrics
+        test_metrics_path = os.path.join(saveFolder, 'metrics.csv')
+        test_metrics_df = pd.read_csv(test_metrics_path)
+        reported_metrics = test_metrics_df.iloc[-1]
+    
         run_details.update(time_data)
         run_details.update(reported_metrics)
-        run_details.update(full_train_metrics)
-        run_details = pd.DataFrame(run_details)
+        update_metrics_dict(run_details, data, split_indicies['train'], model, 'train')
+        wandb.log(metrics)
 
-        all_run_details_path = os.path.join(kPath.dirVeg, 'runs', 'best_metrics_all_runs.csv')
+        run_details_df = pd.DataFrame(run_details)
+        all_run_details_path = os.path.join(kPath.dirVeg, 'runs', 'runs.csv')
         if os.path.exists(all_run_details_path):
-            all_run_details = pd.read_csv(all_run_details_path)
-            all_run_details = pd.concat([all_run_details, run_details])
-            all_run_details.to_csv(all_run_details_path, index=False)
+            all_run_details_df = pd.read_csv(all_run_details_path)
+            all_run_details_df = pd.concat([all_run_details_df, run_details_df])
+            all_run_details_df.to_csv(all_run_details_path, index=False)
         else:
-            run_details.to_csv(all_run_details_path, index=False)
+            run_details_df.to_csv(all_run_details_path, index=False)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train model")
     # admin
     parser.add_argument("--wandb_name", type=str, default="default")
-    parser.add_argument("--run_name", type=str, required=True)   
+    parser.add_argument('--exp_name', type=str, default='')
+    parser.add_argument("--run_name", type=str, default='')   
     parser.add_argument("--testing", type=bool, default=False)
-    parser.add_argument("--fold", type=int, required=True, choices=[0, 1, 2, 3, 4])
-    parser.add_argument("--weights_path", type=str, default="")
     parser.add_argument("--device", type=int, default=-1)
+    parser.add_argument("--seed", type=int, default=0)
     # dataset 
     parser.add_argument("--dataset", type=str, default="singleDaily-modisgrid-new-const")
     parser.add_argument("--split_version", type=str, default="dataset", choices=["dataset", "stratified"])
-    parser.add_argument("--rho", type=int, default=45)
-    parser.add_argument("--satellites", type=str, default="no_landsat")
+    parser.add_argument("--fold", type=int, default=0, choices=[0, 1, 2, 3, 4])
     # model
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--weights_path", type=str, default="")
+    parser.add_argument("--rho", type=int, default=45)
     parser.add_argument("--nh", type=int, default=32)
     parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "sgd"])
     parser.add_argument("--dropout", type=float, default=0.1)
@@ -235,26 +203,31 @@ if __name__ == "__main__":
 
     set_seed(args.seed)
     
-    # create save dir to save hyperparameters, metrics, models, time cost
-    save_path = ''
+    # Set up save dir to save hyperparameters, metrics, models, time cost
+    fold_save_path = ''
+    run_details = {}
     if not args.testing:
         save_path = os.path.join(kPath.dirVeg, 'runs', f'{args.run_name}')
         run_details_path = os.path.join(save_path, 'details.json')
 
-        # create save dir if it doesn't already exist
-        if not os.path.exists(save_path):
+        # Create save dir if it doesn't already exist
+        try: # prevent race conditions
             os.mkdir(save_path)
             # save hyperparameters
             with open(run_details_path, 'w') as f:
                 to_save = vars(args)
                 json.dump(to_save, f, indent=4)
-    
-        # create fold sub save dir  
+            print('Created new directory')
+        except:
+            print(f'Adding to existing directory.')
+
+        # Create fold sub save dir  
         fold_save_path = os.path.join(save_path, str(args.fold))
         if os.path.exists(fold_save_path):
             raise Exception('Run already exists!')
         os.mkdir(fold_save_path)
 
+        # Create wandb log
         with open(run_details_path, 'r') as f:
             run_details = json.load(f)
         wandb.init(
@@ -262,7 +235,7 @@ if __name__ == "__main__":
             project=args.wandb_name,
             config=run_details
         )
-        wandb.run.name = args.run_name + "_f" + str(args.fold)
+        wandb.run.name = args.run_name + '_f' + str(args.fold)
 
     train(args, fold_save_path, run_details)
     
