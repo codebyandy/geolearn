@@ -95,3 +95,28 @@ bM = 10
               # old_reported_model_path = os.path.join(saveFolder, f'model_ep{int(reported_metrics.epoch)}.pth')
         # new_reported_model_path = os.path.join(saveFolder, 'best_model.pth')
         # shutil.copyfile(old_reported_model_path, new_reported_model_path)
+
+
+
+
+            # TODO: decide how to approach this (split wise)
+    # quality_test_sites = dictSubset['testSite_k05']
+    # poor_test_sites = dictSubset['testSite_underThresh']
+    
+    # quality_indices = np.where(np.isin(jInd, quality_test_sites))[0]
+    # poor_indices = np.where(np.isin(jInd, poor_test_sites))[0]
+
+
+    # # pred = get_metrics(data, indices, config)
+    # jInd_ind = jInd[indices]
+    # iInd_ind = iInd[indices]
+
+    # pred = np.array(pred)
+    # jInd_ind = np.array(jInd_ind)
+    # iInd_ind = np.array(iInd_ind)
+
+    # # TODO: which is train and which is test?
+    # # TODO: output?
+    # res = np.column_stack([pred, jInd_ind, iInd_ind])
+    # path = os.path.join(kPath.dirVeg, 'transformer_lfmc_daily.npy')
+    # np.save(path, res)

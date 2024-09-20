@@ -115,7 +115,7 @@ def train(args, saveFolder, run_details):
         epoch_wall_times.append(time.time() - epoch_start)
 
         # Get metrics on full test set every `test_epoch`
-        if ep > 0 and ep % test_epoch == 0:
+        if (ep > 0 and ep % test_epoch == 0) or ep == epochs:
             test_start = time.time() 
             print("Testing on full test set") 
             
@@ -125,52 +125,51 @@ def train(args, saveFolder, run_details):
                 update_metrics_dict(test_metrics, data, split_indicies['test_quality_sites'], model, 'qual')
                 update_metrics_dict(test_metrics, data, split_indicies['test_poor_sites'], model, 'poor')
                 metrics.update(test_metrics)
-            
-                if not args.testing:
-                    # Update sheet with (epoch, metrics) for this run
-                    test_metrics.update({'epoch' : [ep]})
-                    new_test_metrics_df = pd.DataFrame(test_metrics)
-                    metrics_path = os.path.join(saveFolder, 'metrics.csv')
-                    if os.path.exists(metrics_path):
-                        prev_test_metrics_df = pd.read_csv(metrics_path)
-                        new_test_metrics_df = pd.concat([prev_test_metrics_df, new_test_metrics_df])   
-                    new_test_metrics_df.to_csv(os.path.join(saveFolder, 'metrics.csv'), index=False)
-                    torch.save(model.state_dict(), os.path.join(saveFolder, f'model_ep{ep}.pth'))
+
+                # Update sheet with (epoch, metrics) for this run
+                test_metrics.update({'epoch' : [ep]})
+                new_test_metrics_df = pd.DataFrame(test_metrics)
+                metrics_path = os.path.join(saveFolder, 'metrics.csv')
+                if os.path.exists(metrics_path):
+                    prev_test_metrics_df = pd.read_csv(metrics_path)
+                    new_test_metrics_df = pd.concat([prev_test_metrics_df, new_test_metrics_df])   
+                new_test_metrics_df.to_csv(os.path.join(saveFolder, 'metrics.csv'), index=False)
+                torch.save(model.state_dict(), os.path.join(saveFolder, f'model_ep{ep}.pth'))
 
             test_wall_times.append(time.time() - test_start)
 
         if not args.testing:
             wandb.log(metrics)
 
-    if not args.testing:
-        # Save mean wall times
-        time_path = os.path.join(saveFolder, 'time.csv')
-        time_data = {
-            'mean_epoch_time': [np.mean(epoch_wall_times)],
-            'mean_iteration_time': [np.mean(iteration_wall_times)],
-            'mean_test_time': [np.mean(test_wall_times)]
-        }
-        time_df = pd.DataFrame(time_data)
-        time_df.to_csv(time_path, index=False)
+    # Save mean wall times
+    time_path = os.path.join(saveFolder, 'time.csv')
+    time_data = {
+        'mean_epoch_time': [np.mean(epoch_wall_times)],
+        'mean_iteration_time': [np.mean(iteration_wall_times)],
+        'mean_test_time': [np.mean(test_wall_times)]
+    }
+    time_df = pd.DataFrame(time_data)
+    time_df.to_csv(time_path, index=False)
 
-        # Update sheet containing all runs and best metrics
-        test_metrics_path = os.path.join(saveFolder, 'metrics.csv')
-        test_metrics_df = pd.read_csv(test_metrics_path)
-        reported_metrics = test_metrics_df.iloc[-1]
-    
-        run_details.update(time_data)
-        run_details.update(reported_metrics)
-        update_metrics_dict(run_details, data, split_indicies['train'], model, 'train')
+    # Update sheet containing all runs and best metrics
+    test_metrics_path = os.path.join(saveFolder, 'metrics.csv')
+    test_metrics_df = pd.read_csv(test_metrics_path)
+    reported_metrics = test_metrics_df.iloc[-1]
+
+    run_details.update(time_data)
+    run_details.update(reported_metrics)
+    update_metrics_dict(run_details, data, split_indicies['train'], model, 'train')
+    if not args.testing:
         wandb.log(metrics)
 
-        run_details_df = pd.DataFrame(run_details)
-        all_run_details_path = os.path.join(kPath.dirVeg, 'runs', 'runs.csv')
-        if os.path.exists(all_run_details_path):
-            all_run_details_df = pd.read_csv(all_run_details_path)
-            all_run_details_df = pd.concat([all_run_details_df, run_details_df])
-            all_run_details_df.to_csv(all_run_details_path, index=False)
-        else:
-            run_details_df.to_csv(all_run_details_path, index=False)
+    run_details_df = pd.DataFrame(run_details)
+    all_run_details_path = os.path.join(kPath.dirVeg, 'runs', 'runs.csv')
+    if os.path.exists(all_run_details_path):
+        all_run_details_df = pd.read_csv(all_run_details_path)
+        all_run_details_df = pd.concat([all_run_details_df, run_details_df])
+        all_run_details_df.to_csv(all_run_details_path, index=False)
+    else:
+        run_details_df.to_csv(all_run_details_path, index=False)
 
 
 if __name__ == "__main__":
@@ -204,32 +203,32 @@ if __name__ == "__main__":
     set_seed(args.seed)
     
     # Set up save dir to save hyperparameters, metrics, models, time cost
-    fold_save_path = ''
-    run_details = {}
+    save_path = os.path.join(kPath.dirVeg, 'runs', args.run_name)
+
+    # Create save dir if it doesn't already exist
+    try: # prevent race conditions
+        os.mkdir(save_path)
+        print('Created new directory')
+    except:
+        print(f'Adding to existing directory.')
+
+    # Create fold sub save dir  
+    fold_save_path = os.path.join(save_path, str(args.fold))
+    if os.path.exists(fold_save_path):
+        raise Exception('Run already exists!')
+    os.mkdir(fold_save_path)
+    
+    # save hyperparameters
+    run_details_path = os.path.join(fold_save_path, 'details.json')
+    with open(run_details_path, 'w') as f:
+        to_save = vars(args)
+        json.dump(to_save, f, indent=4)
+    
+    with open(run_details_path, 'r') as f:
+        run_details = json.load(f)
+
     if not args.testing:
-        save_path = os.path.join(kPath.dirVeg, 'runs', f'{args.run_name}')
-        run_details_path = os.path.join(save_path, 'details.json')
-
-        # Create save dir if it doesn't already exist
-        try: # prevent race conditions
-            os.mkdir(save_path)
-            # save hyperparameters
-            with open(run_details_path, 'w') as f:
-                to_save = vars(args)
-                json.dump(to_save, f, indent=4)
-            print('Created new directory')
-        except:
-            print(f'Adding to existing directory.')
-
-        # Create fold sub save dir  
-        fold_save_path = os.path.join(save_path, str(args.fold))
-        if os.path.exists(fold_save_path):
-            raise Exception('Run already exists!')
-        os.mkdir(fold_save_path)
-
         # Create wandb log
-        with open(run_details_path, 'r') as f:
-            run_details = json.load(f)
         wandb.init(
             dir=os.path.join(kPath.dirVeg),
             project=args.wandb_name,
