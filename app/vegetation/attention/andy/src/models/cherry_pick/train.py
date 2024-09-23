@@ -54,7 +54,7 @@ def train(args, saveFolder, run_details):
     # Set up model 
     xS, xM, pS, pM, xcT, yT = randomSubset(data, split_indicies["train"], batch_size) # Get sample to get shapes for model
     nTup = (xS.shape[-1], xM.shape[-1]) # (list[int]) Number of input features for each remote sensing source (i.e. Sentinel, Modis) 
-    lTup = (xS.shape[1], xM.shape[1]) # (tuple[int]) number of sampled days for each remote sensing source
+    lTup = (xS.shape[1], xM.shape[1]) # (tuple[int]) N)umber of sampled days for each remote sensing source
     nxc = data['xc'].shape[-1] # (int): number of constant variables
     
     model = FinalModel(nTup, nxc, nh, dropout)
@@ -122,6 +122,7 @@ def train(args, saveFolder, run_details):
             model.eval()
             with torch.no_grad():
                 test_metrics = {}
+                update_metrics_dict(run_details, data, split_indicies['train'], model, 'train')
                 update_metrics_dict(test_metrics, data, split_indicies['test_quality_sites'], model, 'qual')
                 update_metrics_dict(test_metrics, data, split_indicies['test_poor_sites'], model, 'poor')
                 metrics.update(test_metrics)
@@ -158,7 +159,7 @@ def train(args, saveFolder, run_details):
 
     run_details.update(time_data)
     run_details.update(reported_metrics)
-    update_metrics_dict(run_details, data, split_indicies['train'], model, 'train')
+    # update_metrics_dict(run_details, data, split_indicies['train'], model, 'train')
     if not args.testing:
         wandb.log(metrics)
 
@@ -183,7 +184,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
     # dataset 
     parser.add_argument("--dataset", type=str, default="singleDaily-modisgrid-new-const")
-    parser.add_argument("--split_version", type=str, default="dataset", choices=["dataset", "stratified"])
+    parser.add_argument("--split_version", type=str, default="stratified", choices=["dataset", "stratified"])
     parser.add_argument("--fold", type=int, default=0, choices=[0, 1, 2, 3, 4])
     # model
     parser.add_argument("--weights_path", type=str, default="")
