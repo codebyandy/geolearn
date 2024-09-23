@@ -80,6 +80,7 @@ def main(args):
 
     wandb_name = args.wandb_name
     run_name = args.run_name
+    exp_name = args.exp_name
     split_version = args.split_version
     dataset = args.dataset
     test_epoch = args.test_epoch
@@ -107,7 +108,7 @@ def main(args):
             train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
             cmd_line = f'python {train_path} --run_name {run_name_details} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
             cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
-            cmd_line += f' --epochs {epochs}  --wandb_name {wandb_name}'
+            cmd_line += f' --epochs {epochs}  --wandb_name {wandb_name} --exp_name {exp_name}'
             cmd_line += f' --split_version {split_version} --dataset {dataset} --test_epoch {test_epoch} --fold {fold} --epochs {epochs}'
             submitJob(run_name, cmd_line)
             print('Submitted fold', fold)
