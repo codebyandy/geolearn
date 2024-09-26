@@ -190,7 +190,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
     # dataset 
     parser.add_argument("--dataset", type=str, default="singleDaily-modisgrid-new-const")
-    parser.add_argument("--split_version", type=str, default="stratified", choices=["dataset", "stratified"])
+    parser.add_argument("--split_version", type=str, default="stratified")
     parser.add_argument("--fold", type=int, default=0, choices=[0, 1, 2, 3, 4])
     # model
     parser.add_argument("--weights_path", type=str, default="")

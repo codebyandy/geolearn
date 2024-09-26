@@ -127,7 +127,7 @@ if __name__ == '__main__':
     parser.add_argument('--wandb_name', type=str, required=True)
     parser.add_argument('--exp_name', type=str, default='')
     parser.add_argument('--run_name', type=str, default='')
-    parser.add_argument('--split_version', type=str, default='stratified', choices=['dataset', 'stratified'])
+    parser.add_argument('--split_version', type=str, default='stratified')
     parser.add_argument('--dataset', type=str, default='singleDaily-modisgrid-new-const')
     parser.add_argument('--test_epoch', type=int, default=50)
     parser.add_argument('--epochs', type=int, default=500)
