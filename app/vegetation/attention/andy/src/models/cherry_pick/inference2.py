@@ -227,6 +227,8 @@ def main(args):
         df = pd.concat([train_df, test_qual_df, test_poor_df])
         df['split'] = ['train'] * len(train_df) + ['test_qual'] * len(test_qual_df) + ['test_poor'] * len(test_poor_df)
 
+        pdb.set_trace()
+
         # convert site index to site ids
         sites_path = os.path.join(kPath.dirVeg, "model/data/singleDaily-nadgrid/info.csv")
         sites_df = pd.read_csv(sites_path)

@@ -5,24 +5,10 @@ Usage:
 - Call the script with paths to a model to get train and test metrics.
 - Use `train_metrics` or `test_metrics` to get only those metrics.
 """
-
-# hydroDl module by Kuai Fang
-from hydroDL import kPath
-
 import numpy as np
-import json
-import os
 import torch
 from sklearn.metrics import r2_score
-import pandas as pd
-import argparse
-import shutil
-
-from model import FinalModel
-from data import randomSubset, prepare_data
 from utils import varS, varM
-
-import pdb
 
 
 def get_metrics(obs, pred):
@@ -125,7 +111,7 @@ def update_metrics_dict(metrics, data, indices, model, split):
     new_metrics = evaluate(data, indices, model)
     for metric_type in ['obs', 'site', 'anomaly']:
         for metric_name in ['rmse', 'corrcoef', 'coefdet']:
-            metrics[f'{split}_{metric_type}_{metric_name}'] = [new_metrics[metric_type][metric_name]]
+            metrics[f'{split}_{metric_type}_{metric_name}'] = new_metrics[metric_type][metric_name]
 
 
 

@@ -37,4 +37,4 @@
 
 # python src/models/cherry_pick/inference2.py --dates avail_insitu --fold 0 --weights_path /Users/andyhuynh/Desktop/model_ep500.pth --hyperparams_path /Users/andyhuynh/Desktop/details.json --save_dir /Users/andyhuynh/Desktop
 
-python src/models/cherry_pick/train.py --wandb_name debugging --exp_name test --run_name test
+python src/models/cherry_pick/train.py --wandb_name debugging --exp_name test --run_name test5 --epochs 8 --test_epoch 2

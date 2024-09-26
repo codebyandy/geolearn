@@ -75,10 +75,10 @@ def train(args, saveFolder, run_details):
         model.train()
         
         metrics = {
-            "train_epochmean_loss" : 0,
-            "train_epochmean_rmse" : 0,
-            "train_epochmean_corrcoef" : 0,
-            "train_epochmean_coefdet" : 0
+            "train_epoch_mean_loss" : 0,
+            "train_epoch_mean_rmse" : 0,
+            "train_epoch_mean_corrcoef" : 0,
+            "train_epoch_mean_coefdet" : 0
         }
         
         for _ in range(nIterEp):
@@ -97,10 +97,10 @@ def train(args, saveFolder, run_details):
     
             # Get iteration training metrics      
             minibatch_metrics = get_metrics(yP.detach().numpy(), yT.detach().numpy())
-            metrics['train_epochmean_loss'] += loss.item()
-            metrics['train_epochmean_rmse']+= minibatch_metrics['rmse']
-            metrics['train_epochmean_corrcoef'] += minibatch_metrics['corrcoef']
-            metrics['train_epochmean_coefdet'] += minibatch_metrics['coefdet']
+            metrics['train_epoch_mean_loss'] += loss.item()
+            metrics['train_epoch_mean_rmse']+= minibatch_metrics['rmse']
+            metrics['train_epoch_mean_corrcoef'] += minibatch_metrics['corrcoef']
+            metrics['train_epoch_mean_coefdet'] += minibatch_metrics['coefdet']
 
             iteration_wall_times.append(time.time() - iteration_start)
 
@@ -109,8 +109,8 @@ def train(args, saveFolder, run_details):
 
         metrics = {metric : sum / nIterEp for metric, sum in metrics.items()}
         print('Epoch: {} | Loss: {:.3f} Coefdet: {:.3f}'.format(ep, \
-                                                                metrics['train_epochmean_loss'], \
-                                                                metrics['train_epochmean_coefdet']))
+                                                                metrics['train_epoch_mean_loss'], \
+                                                                metrics['train_epoch_mean_coefdet']))
         
         epoch_wall_times.append(time.time() - epoch_start)
 
@@ -121,20 +121,26 @@ def train(args, saveFolder, run_details):
             
             model.eval()
             with torch.no_grad():
-                test_metrics = {}
-                update_metrics_dict(run_details, data, split_indicies['train'], model, 'train')
-                update_metrics_dict(test_metrics, data, split_indicies['test_quality_sites'], model, 'qual')
-                update_metrics_dict(test_metrics, data, split_indicies['test_poor_sites'], model, 'poor')
-                metrics.update(test_metrics)
+                full_set_metrics = {}
+                update_metrics_dict(full_set_metrics, data, split_indicies['train'], model, 'train')
+                update_metrics_dict(full_set_metrics, data, split_indicies['test_quality_sites'], model, 'qual')
+                update_metrics_dict(full_set_metrics, data, split_indicies['test_poor_sites'], model, 'poor')
+                metrics.update(full_set_metrics)
 
                 # Update sheet with (epoch, metrics) for this run
-                test_metrics.update({'epoch' : [ep]})
-                new_test_metrics_df = pd.DataFrame(test_metrics)
+                full_set_metrics.update({'epoch' : ep})
+                new_metrics_df = pd.DataFrame(full_set_metrics, index=[0])
+
+                # move epochs to front
+                cols = list(new_metrics_df)
+                cols.insert(0, cols.pop(cols.index('epoch')))
+                new_metrics_df = new_metrics_df.loc[:, cols]
+
                 metrics_path = os.path.join(saveFolder, 'metrics.csv')
                 if os.path.exists(metrics_path):
-                    prev_test_metrics_df = pd.read_csv(metrics_path)
-                    new_test_metrics_df = pd.concat([prev_test_metrics_df, new_test_metrics_df])   
-                new_test_metrics_df.to_csv(os.path.join(saveFolder, 'metrics.csv'), index=False)
+                    prev_metrics_df = pd.read_csv(metrics_path)
+                    new_metrics_df = pd.concat([prev_metrics_df, new_metrics_df])   
+                new_metrics_df.to_csv(os.path.join(saveFolder, 'metrics.csv'), index=False)
                 torch.save(model.state_dict(), os.path.join(saveFolder, f'model_ep{ep}.pth'))
 
             test_wall_times.append(time.time() - test_start)
@@ -153,9 +159,9 @@ def train(args, saveFolder, run_details):
     time_df.to_csv(time_path, index=False)
 
     # Update sheet containing all runs and best metrics
-    test_metrics_path = os.path.join(saveFolder, 'metrics.csv')
-    test_metrics_df = pd.read_csv(test_metrics_path)
-    reported_metrics = test_metrics_df.iloc[-1]
+    metrics_path = os.path.join(saveFolder, 'metrics.csv')
+    metrics_df = pd.read_csv(metrics_path)
+    reported_metrics = metrics_df.iloc[-1]
 
     run_details.update(time_data)
     run_details.update(reported_metrics)
