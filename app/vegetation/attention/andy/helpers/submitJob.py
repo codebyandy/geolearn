@@ -86,6 +86,7 @@ def main(args):
     test_epoch = args.test_epoch
 
     batch_size = args.batch_size
+    loss_fn = args.loss_fn
     optimizer = args.optimizer
     iters_per_epoch = args.iters_per_epoch
     sched_start_epoch = args.sched_start_epoch
@@ -107,7 +108,7 @@ def main(args):
         for fold in folds_lst:
             train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
             cmd_line = f'python {train_path} --run_name {run_name_details} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
-            cmd_line += f' --optimizer {optimizer} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
+            cmd_line += f' --optimizer {optimizer} --loss_fn {loss_fn} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
             cmd_line += f' --epochs {epochs}  --wandb_name {wandb_name} --exp_name {exp_name}'
             cmd_line += f' --split_version {split_version} --dataset {dataset} --test_epoch {test_epoch} --fold {fold} --epochs {epochs}'
             submitJob(run_name, cmd_line)
@@ -120,7 +121,8 @@ if __name__ == '__main__':
     parser.add_argument('--dropouts', default=DEFAULT_DROPOUTS)
     parser.add_argument('--embedding_sizes', default=DEFAULT_EMBEDDING_SIZES)
     parser.add_argument('--batch_size', default=500)
-    parser.add_argument('--optimizer', default='adam')
+    parser.add_argument('--optimizer', default='adam', choices=['adam', 'sgd'])
+    parser.add_argument('--loss_fn', default='l1', choices=['l1', 'mse'])
     parser.add_argument('--learning_rates', default=DEFAULT_LEARNING_RATES)
     parser.add_argument('--iters_per_epoch', default=20)
     parser.add_argument('--sched_start_epoch', default=200)

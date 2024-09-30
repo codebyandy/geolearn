@@ -31,6 +31,7 @@ def train(args, saveFolder, run_details):
     learning_rate = args.learning_rate
     nIterEp = args.iters_per_epoch
     sched_start_epoch = args.sched_start_epoch
+    loss_fn = args.loss_fn
     optimizer = args.optimizer
     dropout = args.dropout
     batch_size = args.batch_size
@@ -58,10 +59,15 @@ def train(args, saveFolder, run_details):
     nxc = data['xc'].shape[-1] # (int): number of constant variables
     
     model = FinalModel(nTup, nxc, nh, dropout)
-    loss_fn = nn.L1Loss(reduction='mean')
-    if optimizer == "adam":
+    # loss
+    if loss_fn == 'l1':
+        loss_fn = nn.L1Loss(reduction='mean')
+    elif loss_fn == 'mse':
+        loss_fn = nn.MSELoss(reduction='mean')
+    # optimizer
+    if optimizer == 'adam':
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    else:
+    elif optimizer == 'sgd':
         optimizer = optim.SGD(model.parameters(), lr=learning_rate)    
     scheduler = lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.01, total_iters=800)
     
@@ -196,6 +202,7 @@ if __name__ == "__main__":
     parser.add_argument("--weights_path", type=str, default="")
     parser.add_argument("--rho", type=int, default=45)
     parser.add_argument("--nh", type=int, default=32)
+    parser.add_argument('--loss_fn', type=str, default='l1', choices=['l1', 'mse'])
     parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "sgd"])
     parser.add_argument("--dropout", type=float, default=0.1)
     # training
