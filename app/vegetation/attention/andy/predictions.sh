@@ -37,32 +37,32 @@ python src/models/cherry_pick/inference2.py \
     --fold 0 \
     --weights_path ~/lfmc/data/runs/stratified_s0_handpick3_cherry_64_0.1_0.01_1/0/model_ep200.pth \
     --hyperparams_path ~/lfmc/data/runs/stratified_s0_handpick3_cherry_64_0.1_0.01_1/0/details.json \
-    --save_dir ~/lfmc/data/runs/predictions
+    --save_dir ~/lfmc/data/predictions
 srun --nodes=1 --time=00:30:00 --job-name=job1 \
 python src/models/cherry_pick/inference2.py \
     --dates avail_insitu  \
     --fold 1 \
     --weights_path ~/lfmc/data/runs/stratified_s0_handpick3_cherry_64_0.1_0.01_1/1/model_ep200.pth \
     --hyperparams_path ~/lfmc/data/runs/stratified_s0_handpick3_cherry_64_0.1_0.01_1/1/details.json \
-    --save_dir ~/lfmc/data/runs/predictions
+    --save_dir ~/lfmc/data/predictions
 srun --nodes=1 --time=00:30:00 --job-name=job2 \
 python src/models/cherry_pick/inference2.py \
     --dates avail_insitu  \
     --fold 2 \
     --weights_path ~/lfmc/data/runs/stratified_s0_handpick3_cherry_64_0.1_0.01_1/2/model_ep200.pth \
     --hyperparams_path ~/lfmc/data/runs/stratified_s0_handpick3_cherry_64_0.1_0.01_1/2/details.json \
-    --save_dir ~/lfmc/data/runs/predictions
+    --save_dir ~/lfmc/data/predictions
 srun --nodes=1 --time=00:30:00 --job-name=job3 \
 python src/models/cherry_pick/inference2.py \
     --dates avail_insitu  \
     --fold 3 \
     --weights_path ~/lfmc/data/runs/stratified_s0_handpick3_cherry_64_0.1_0.01_1/3/model_ep200.pth \
     --hyperparams_path ~/lfmc/data/runs/stratified_s0_handpick3_cherry_64_0.1_0.01_1/3/details.json \
-    --save_dir ~/lfmc/data/runs/predictions
+    --save_dir ~/lfmc/data/predictions
 srun --nodes=1 --time=00:30:00 --job-name=job4 \
 python src/models/cherry_pick/inference2.py \
     --dates avail_insitu  \
     --fold 4 \
     --weights_path ~/lfmc/data/runs/stratified_s0_handpick3_cherry_64_0.1_0.01_1/4/model_ep200.pth \
     --hyperparams_path ~/lfmc/data/runs/stratified_s0_handpick3_cherry_64_0.1_0.01_1/4/details.json \
-    --save_dir ~/lfmc/data/runs/predictions
+    --save_dir ~/lfmc/data/predictions
