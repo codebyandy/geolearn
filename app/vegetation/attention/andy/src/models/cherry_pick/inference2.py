@@ -225,7 +225,7 @@ def main(args):
         test_qual_df = get_predictions(data, split_indicies['test_quality_sites'], model)
         test_poor_df = get_predictions(data, split_indicies['test_poor_sites'], model)
         df = pd.concat([train_df, test_qual_df, test_poor_df])
-        df['split'] = ['train'] * len(train_df) + ['test_qual'] * len(test_qual_df) + ['test_poor'] * len(test_poor_df))
+        df['split'] = ['train'] * len(train_df) + ['test_qual'] * len(test_qual_df) + ['test_poor'] * len(test_poor_df)
 
         # convert site index to site ids
         sites_path = os.path.join(kPath.dirVeg, "model/data/singleDaily-nadgrid/info.csv")
