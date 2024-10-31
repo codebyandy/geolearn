@@ -10,7 +10,7 @@ import os
 
 DEFAULT_METHODS = 'cherry'
 DEFAULT_SEEDS = '0,1,2'
-DEFAULT_DROPOUTS = '0.6'
+DEFAULT_DROPOUTS = '0.2'
 DEFAULT_EMBEDDING_SIZES = '64'
 DEFAULT_LEARNING_RATES = '0.01'
 DEFAULT_FOLDS = '0,1,2,3,4'
@@ -98,13 +98,13 @@ def main(args):
         for i, (method, seed, dropout, embedding_size, learning_rate) in enumerate(hyperparam_combos):
             run_name_details = f'{run_name}_{method}_{embedding_size}_{dropout}_{learning_rate}_{seed}'
             save_path = os.path.join(kPath.dirVeg, 'runs', run_name_details)
-            print(save_path)
+            print("Saving to path ", save_path)
             if os.path.exists(save_path):
                 raise Exception(f'run_name {run_name_details} already exists!')
 
     for i, (method, seed, dropout, embedding_size, learning_rate) in enumerate(hyperparam_combos):
         run_name_details = f'{run_name}_{method}_{embedding_size}_{dropout}_{learning_rate}_{seed}'
-        print('Combo', i, 'run_name', run_name_details)
+        print('=>', run_name', run_name_details)
         for fold in folds_lst:
             train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
             cmd_line = f'python {train_path} --run_name {run_name_details} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
@@ -112,7 +112,6 @@ def main(args):
             cmd_line += f' --epochs {epochs}  --wandb_name {wandb_name} --exp_name {exp_name}'
             cmd_line += f' --split_version {split_version} --dataset {dataset} --test_epoch {test_epoch} --fold {fold} --epochs {epochs}'
             submitJob(run_name, cmd_line)
-            print('Submitted fold', fold)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train model')
