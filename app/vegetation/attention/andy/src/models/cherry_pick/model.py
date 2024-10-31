@@ -41,10 +41,9 @@ class InputFeature(nn.Module):
     def forward(self, xTup, pTup, xc):
         outLst = list()
         for k in range(len(xTup)):
-            x = self.lnLst[k](xTup[k]) + self.getPos(pTup[k])
+            x = self.lnLst[k](xTup[k]) + self.getPos(pTup[k]) + self.lnXc(xc)
             outLst.append(x)
-        outC = self.lnXc(xc)
-        out = torch.cat(outLst + [outC[:, None, :]], dim=1)
+        out = torch.cat(outLst, dim=1)
         return out
 
 
