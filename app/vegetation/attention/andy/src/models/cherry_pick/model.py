@@ -41,10 +41,11 @@ class InputFeature(nn.Module):
     def forward(self, xTup, pTup, xc):
         outLst = list()
         for k in range(len(xTup)):
-            x = self.lnLst[k](xTup[k]) + self.getPos(pTup[k])
+            # import pdb
+            # pdb.set_trace()
+            x = self.lnLst[k](xTup[k]) + self.getPos(pTup[k]) + self.lnXc(xc)[:, None, :]
             outLst.append(x)
-        outC = self.lnXc(xc)
-        out = torch.cat(outLst + [outC[:, None, :]], dim=1)
+        out = torch.cat(outLst, dim=1)
         return out
 
 
@@ -129,6 +130,7 @@ class FinalModel(nn.Module):
         out = self.ffn2(out)
         out = out.squeeze(-1)
 
+        
         # Final aggregation: 
         # 1. Take mean of the proto-prediction from same remote sensing source
         # 2. Sum the means
@@ -137,5 +139,5 @@ class FinalModel(nn.Module):
         for i in lTup:
             temp = temp + out[:, k : i + k].mean(-1)
             k = k + i
-        temp = temp + out[:, k:].mean(-1)
+
         return temp
