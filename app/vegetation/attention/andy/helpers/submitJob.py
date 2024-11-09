@@ -38,8 +38,8 @@ def submitJob(jobName, git_branch, cmdLine, nH=24, nM=16):
         fh.writelines('#SBATCH --mem={}000\n'.format(nM))
         fh.writelines('#SBATCH --mail-type=ALL\n')
         fh.writelines('#SBATCH --mail-user=avhuynh@stanford.edu\n')
-        fh.writelines('lfmc')
-        fh.writelines(f"git checkout {git_branch}")
+        fh.writelines('cd ~/lfmc/geolearn/app/vegetation/attention/andy\n')
+        fh.writelines(f"git checkout {git_branch}\n")
         if kPath.host == 'icme':
             fh.writelines('source activate pytorch\n')
         elif kPath.host == 'sherlock':
