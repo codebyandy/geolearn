@@ -6,7 +6,6 @@ from torch import nn
 import torch
 import math
 
-
 class InputFeature(nn.Module):
     """
     Called in FinalModel class. For each remote sensing source, takes the input features
@@ -23,12 +22,15 @@ class InputFeature(nn.Module):
         """
         super().__init__()
         self.nh = nh
-        self.lnXc = nn.Sequential(nn.Linear(nxc, nh), nn.ReLU(), nn.Linear(nh, nh))
+        self.source_embedding = nn.Embedding(2, nh)
+
         self.lnLst = nn.ModuleList()
         for n in nTup:
             self.lnLst.append(
                 nn.Sequential(nn.Linear(n, nh), nn.ReLU(), nn.Linear(nh, nh))
             )
+        self.lnXc = nn.Sequential(nn.Linear(nxc, nh), nn.ReLU(), nn.Linear(nh, nh))
+
 
     def getPos(self, pos):
         nh = self.nh
@@ -38,13 +40,15 @@ class InputFeature(nn.Module):
             P[:, :, 2 * i + 1] = torch.cos(pos / (i + 1) * torch.pi)
         return P
 
+
     def forward(self, xTup, pTup, xc):
-        outLst = list()
+        outLst = []
         for k in range(len(xTup)):
-            x = self.lnLst[k](xTup[k]) + self.getPos(pTup[k]) # no source
+            x = self.lnLst[k](xTup[k]) + self.getPos(pTup[k])
+            x += self.source_embedding(torch.tensor(k)) # k=0: sentinel, k=1: modis
+            x += self.lnXc(xc)
             outLst.append(x)
-        outC = self.lnXc(xc) # constants separate
-        out = torch.cat(outLst + [outC[:, None, :]], dim=1)
+        out = torch.cat(outLst, dim=1)
         return out
 
 
@@ -137,5 +141,4 @@ class FinalModel(nn.Module):
         for i in lTup:
             temp = temp + out[:, k : i + k].mean(-1)
             k = k + i
-        temp = temp + out[:, k:].mean(-1)
         return temp
