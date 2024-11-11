@@ -1,6 +1,3 @@
-# Cancel all
-# squeue -u $USER | awk '{print $1}' | tail -n+2 | xargs scancel
-
 from hydroDL import kPath
 
 from itertools import product
@@ -27,7 +24,7 @@ def str_to_lst(str, type):
         raise Exception(f'str_to_lst does not suppor type {type}.')
 
 
-def submitJob(jobName, git_branch, cmdLine, nH=24, nM=16):
+def submitJob(jobName, cmdLine, nH=24, nM=16):
     jobFile = os.path.join(kPath.dirJob, jobName)
     with open(jobFile, 'w') as fh:
         fh.writelines('#!/bin/bash\n')
@@ -38,11 +35,7 @@ def submitJob(jobName, git_branch, cmdLine, nH=24, nM=16):
         fh.writelines('#SBATCH --mem={}000\n'.format(nM))
         fh.writelines('#SBATCH --mail-type=ALL\n')
         fh.writelines('#SBATCH --mail-user=avhuynh@stanford.edu\n')
-        fh.writelines('cd ~/lfmc/geolearn/app/vegetation/attention/andy\n')
-        fh.writelines(f"git checkout {git_branch}\n")
-        if kPath.host == 'icme':
-            fh.writelines('source activate pytorch\n')
-        elif kPath.host == 'sherlock':
+        if kPath.host == 'sherlock':
             fh.writelines('source /home/users/avhuynh/envs/pytorch/bin/activate\n')
         fh.writelines(cmdLine)
     os.system('sbatch {}'.format(jobFile))
@@ -69,6 +62,7 @@ def main(args):
     iters_per_epoch = args.iters_per_epoch
     sched_start_epoch = args.sched_start_epoch
     epochs = args.epochs
+    weight_decay = args.weight_decay
 
     hyperparam_combos = list(product(methods_lst, seeds_lst, dropouts_lst, embedding_sizes_lst, learning_rates_lst))
     
@@ -87,9 +81,10 @@ def main(args):
             train_path = f'/home/users/avhuynh/lfmc/geolearn/app/vegetation/attention/andy/src/models/{method}_pick/train.py'
             cmd_line = f'python {train_path} --run_name {run_name_details} --dropout {dropout} --nh {embedding_size} --batch_size {batch_size} --seed {seed}' 
             cmd_line += f' --optimizer {optimizer} --loss_fn {loss_fn} --learning_rate {learning_rate} --iters_per_epoch {iters_per_epoch} --sched_start_epoch {sched_start_epoch}'
-            cmd_line += f' --epochs {epochs}  --wandb_name {wandb_name} --exp_name {exp_name}'
+            cmd_line += f' --epochs {epochs}  --wandb_name {wandb_name} --exp_name {exp_name} --weight_decay {weight_decay}'
             cmd_line += f' --split_version {split_version} --dataset {dataset} --test_epoch {test_epoch} --fold {fold} --epochs {epochs}'
             submitJob(run_name, cmd_line)
+            # print(run_name, cmd_line)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train model')
@@ -112,6 +107,7 @@ if __name__ == '__main__':
     parser.add_argument('--test_epoch', type=int, default=50)
     parser.add_argument('--epochs', type=int, default=500)
     parser.add_argument('--folds', default=DEFAULT_FOLDS)
+    parser.add_argument('--weight_decay', type=float, default=0)
     parser.add_argument('--protection', action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
 

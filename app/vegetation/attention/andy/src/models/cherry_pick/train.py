@@ -38,6 +38,7 @@ def train(args, saveFolder, run_details):
     test_epoch = args.test_epoch
     split_version = args.split_version
     fold = args.fold
+    weight_decay = args.weight_decay
 
     # Store all required data in `data` dictionary
     data = prepare_data(args.dataset, args.rho)
@@ -66,9 +67,9 @@ def train(args, saveFolder, run_details):
         loss_fn = nn.MSELoss(reduction='mean')
     # optimizer
     if optimizer == 'adam':
-        optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+        optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     elif optimizer == 'sgd':
-        optimizer = optim.SGD(model.parameters(), lr=learning_rate)    
+        optimizer = optim.SGD(model.parameters(), lr=learning_rate, weight_decay=weight_decay)    
     scheduler = lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.01, total_iters=800)
     
     # Training loop
@@ -204,6 +205,7 @@ if __name__ == "__main__":
     parser.add_argument("--nh", type=int, default=32)
     parser.add_argument('--loss_fn', type=str, default='l1', choices=['l1', 'mse'])
     parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "sgd"])
+    parser.add_argument("--weight_decay", type=float, default=0)
     parser.add_argument("--dropout", type=float, default=0.1)
     # training
     parser.add_argument("--batch_size", type=int, default=1000)

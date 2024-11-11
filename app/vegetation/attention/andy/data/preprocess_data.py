@@ -143,6 +143,7 @@ def preprocess(args):
 
     df = dbVeg.DataFrameVeg(data_name) 
     dm = DataModel(X=df.x, XC=df.xc, Y=df.y) 
+    print(df.x.shape, df.xc.shape, df.y.shape)
     
     # normalization
     dm.trans(mtdDefault='minmax') 
@@ -151,6 +152,7 @@ def preprocess(args):
     # prepare data for supervised learning, reshape to (num obs, rho, num varX) 
     dataEnd, (iInd, jInd) = dataTs2Range(dataTup, rho, returnInd=True) 
     x, xc, y, yc = dataEnd 
+    print(x.shape, xc.shape, yc.shape)
     
     iInd = np.array(iInd) # TODO: temporary fix
     jInd = np.array(jInd) # TODO: temporary fix
@@ -181,15 +183,16 @@ def preprocess(args):
 
     # land cover stratification
     dictSubset = split_sites_by_land_cover(df, df.xc, indSiteOverThresh, indSiteUnderThresh, jInd, land_cover_thresh, num_splits)
-
+    import pdb
+    pdb.set_trace()
     # save dataset
-    saveFolder = os.path.join(kPath.dirVeg, 'model', 'attention', f'new_stratified_s{seed}')
-    if not os.path.exists(saveFolder):
-        os.mkdir(saveFolder)
+    # saveFolder = os.path.join(kPath.dirVeg, 'model', 'attention', f'new_stratified_s{seed}')
+    # if not os.path.exists(saveFolder):
+    #     os.mkdir(saveFolder)
 
-    subsetFile = os.path.join(saveFolder, 'subset.json')
-    with open(subsetFile, 'w') as fp:
-        json.dump(dictSubset, fp, indent=4)
+    # subsetFile = os.path.join(saveFolder, 'subset.json')
+    # with open(subsetFile, 'w') as fp:
+    #     json.dump(dictSubset, fp, indent=4)
 
     # #####
     # # FOR TESTING, REMOVE AFTERWARDS

@@ -1,5 +1,0 @@
-/var/spool/slurmd/job55411402/slurm_script: line 10: lfmc: command not found
-error: Your local changes to the following files would be overwritten by checkout:
-	app/vegetation/attention/andy/helpers/submitJob.py
-Please, commit your changes or stash them before you can switch branches.
-Aborting
