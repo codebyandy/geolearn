@@ -46,7 +46,7 @@ class InputFeature(nn.Module):
         for k in range(len(xTup)):
             x = self.lnLst[k](xTup[k]) + self.getPos(pTup[k])
             x += self.source_embedding(torch.tensor(k)) # k=0: sentinel, k=1: modis
-            x += self.lnXc(xc)
+            x += self.lnXc(xc)[:, None, :]
             outLst.append(x)
         out = torch.cat(outLst, dim=1)
         return out
